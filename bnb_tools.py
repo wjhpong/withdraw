@@ -61,52 +61,55 @@ def convert_dust_to_bnb():
     print(output)
 
 
-def buy_bnb_market():
-    """市价单买入 BNB"""
+def query_bnb_balance():
+    """查询 BNB 持仓"""
     exchange = select_exchange(binance_only=True)
     if not exchange:
         return
     
-    # 选择支付币种
-    pay_coin_idx = select_option("选择支付币种:", ["USDT", "USDC", "FDUSD"], allow_back=True)
-    if pay_coin_idx == -1:
-        return
-    pay_coins = ["USDT", "USDC", "FDUSD"]
-    pay_coin = pay_coins[pay_coin_idx]
+    from utils import get_exchange_display_name
+    display_name = get_exchange_display_name(exchange)
     
-    # 查询余额
-    print(f"\n正在查询 {pay_coin} 余额...")
-    output = run_on_ec2(f"balance {exchange}")
+    print(f"\n正在查询 {display_name} BNB 持仓...")
     
-    # 解析余额
-    balance = "0"
-    for line in output.split('\n'):
-        if line.upper().startswith(pay_coin):
-            parts = line.split()
-            if len(parts) >= 2:
-                balance = parts[1]
-                break
-    print(f"💰 {pay_coin} 可用余额: {balance}")
+    # 查询现货账户 BNB
+    spot_bnb = run_on_ec2(f"account_balance {exchange} SPOT BNB").strip()
+    
+    # 查询统一账户 BNB
+    unified_bnb = run_on_ec2(f"account_balance {exchange} UNIFIED BNB").strip()
+    
+    # 查询理财持仓 BNB
+    earn_bnb = run_on_ec2(f"account_balance {exchange} EARN BNB").strip()
     
     # 查询 BNB 当前价格
-    print(f"\n正在查询 BNB/{pay_coin} 价格...")
-    output = run_on_ec2(f"bnb_price {exchange} {pay_coin}")
-    print(output)
+    price_output = run_on_ec2(f"bnb_price {exchange} USDT").strip()
+    bnb_price = 0.0
+    if "价格:" in price_output:
+        try:
+            bnb_price = float(price_output.split("价格:")[1].split()[0])
+        except:
+            pass
     
-    # 输入金额
-    amount = input_amount(f"请输入支付 {pay_coin} 金额:")
-    if amount is None:
-        return
+    # 计算总量和价值
+    try:
+        spot_val = float(spot_bnb) if spot_bnb and spot_bnb != "0" else 0
+        unified_val = float(unified_bnb) if unified_bnb and unified_bnb != "0" else 0
+        earn_val = float(earn_bnb) if earn_bnb and earn_bnb != "0" else 0
+        total = spot_val + unified_val + earn_val
+    except:
+        spot_val = unified_val = earn_val = total = 0
     
-    # 确认
-    confirm = select_option(f"确认用 {amount} {pay_coin} 市价买入 BNB?", ["确认买入", "取消"], allow_back=True)
-    if confirm != 0:
-        print("已取消")
-        return
-    
-    print(f"\n正在市价买入 BNB...")
-    output = run_on_ec2(f"buy_bnb {exchange} {pay_coin} {amount}")
-    print(output)
+    print("\n" + "=" * 50)
+    print(f"💎 {display_name} BNB 持仓")
+    print("=" * 50)
+    print(f"  📦 现货账户:     {spot_val:.8f} BNB")
+    print(f"  📊 统一账户:     {unified_val:.8f} BNB")
+    print(f"  💰 理财持仓:     {earn_val:.8f} BNB")
+    print("-" * 50)
+    print(f"  📋 总计:         {total:.8f} BNB")
+    if bnb_price > 0:
+        total_usd = total * bnb_price
+        print(f"  💵 总价值:       ${total_usd:.2f} (BNB≈${bnb_price:.2f})")
 
 
 def quick_buy_bnb_usdt():
@@ -156,7 +159,7 @@ def manage_bnb_tools():
             "BNB 抵扣开关",
             "小额资产转 BNB",
             "小额 USDT 买 BNB",
-            "市价买入 BNB (选币种)",
+            "BNB 持仓查询",
             "返回主菜单"
         ])
         
@@ -167,7 +170,7 @@ def manage_bnb_tools():
         elif action == 2:
             quick_buy_bnb_usdt()
         elif action == 3:
-            buy_bnb_market()
+            query_bnb_balance()
         else:
             break
         
