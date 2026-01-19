@@ -18,6 +18,7 @@ DEFAULT_EC2_HOST = "tixian"
 EXCHANGES = [
     ("binance", "BINANCE - Dennis"),
     ("binance2", "BINANCE - Vanie"),
+    ("binance3", "BINANCE - 柏青"),
     ("bybit", "BYBIT"),
 ]
 
