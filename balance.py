@@ -216,47 +216,46 @@ def show_balance():
         print("\n⚠️  当前账户暂无余额")
 
 
-def get_coin_balance(exchange: str, coin: str) -> str:
-    """查询指定币种余额（Bybit包括统一账户和资金账户总和）"""
+def get_coin_balance(exchange: str, coin: str, account_type: str = "SPOT") -> str:
+    """查询指定币种余额
+    
+    Args:
+        exchange: 交易所
+        coin: 币种
+        account_type: 账户类型 (SPOT/UNIFIED/FUND/EARN)
+    """
     exchange_base = get_exchange_base(exchange)
+    coin_upper = coin.upper()
+    
     if exchange_base == "bybit":
-        # Bybit需要查询资金账户和统一账户的总和
-        # 查询资金账户余额
-        fund_output = run_on_ec2(f"balance {exchange}")
-        coin_upper = coin.upper()
-        fund_balance = 0.0
-        
-        for line in fund_output.split('\n'):
-            line_upper = line.upper()
-            if line_upper.startswith(coin_upper + '\t') or line_upper.startswith(coin_upper + ' '):
-                parts = line.split()
-                if len(parts) >= 2:
-                    try:
-                        fund_balance = float(parts[1])
-                    except ValueError:
-                        pass
-                break
-        
-        # 查询统一账户余额
-        unified_output = run_on_ec2(f"account_balance bybit UNIFIED {coin}").strip()
-        unified_balance = 0.0
-        if unified_output and not unified_output.startswith("用法") and not unified_output.startswith("未知"):
+        if account_type == "UNIFIED":
+            output = run_on_ec2(f"account_balance bybit UNIFIED {coin}").strip()
+            if output and not output.startswith("用法") and not output.startswith("未知"):
+                try:
+                    return str(float(output))
+                except ValueError:
+                    pass
+            return "0"
+        else:
+            # 资金账户
+            fund_output = run_on_ec2(f"balance {exchange}")
+            for line in fund_output.split('\n'):
+                line_upper = line.upper()
+                if line_upper.startswith(coin_upper + '\t') or line_upper.startswith(coin_upper + ' '):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        try:
+                            return parts[1]
+                        except:
+                            pass
+                    break
+            return "0"
+    else:
+        # Binance - 使用 account_balance 命令精确查询
+        output = run_on_ec2(f"account_balance {exchange} {account_type} {coin}").strip()
+        if output and not output.startswith("用法") and not output.startswith("未知") and not output.startswith("错误"):
             try:
-                unified_balance = float(unified_output)
+                return str(float(output))
             except ValueError:
                 pass
-        
-        # 返回总和
-        total_balance = fund_balance + unified_balance
-        return str(total_balance)
-    else:
-        # Binance直接查询
-        output = run_on_ec2(f"balance {exchange}")
-        coin_upper = coin.upper()
-        for line in output.split('\n'):
-            line_upper = line.upper()
-            if line_upper.startswith(coin_upper + '\t') or line_upper.startswith(coin_upper + ' '):
-                parts = line.split()
-                if len(parts) >= 2:
-                    return parts[1]
         return "0"
