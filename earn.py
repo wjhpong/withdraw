@@ -2,7 +2,42 @@
 """币安理财操作"""
 
 from utils import run_on_ec2, select_option, select_exchange, get_exchange_display_name, input_amount
-from balance import get_coin_balance
+from balance import get_coin_balance, get_coin_price
+
+# 显示余额的最小价值阈值
+SPOT_MIN_VALUE = 20
+
+
+def show_spot_balances(exchange: str):
+    """显示现货余额 (≥20U)"""
+    print(f"\n正在查询现货余额...")
+    output = run_on_ec2(f"balance {exchange}")
+    
+    # 解析余额并按市值过滤
+    balances = []
+    for line in output.strip().split('\n'):
+        if '正在查询' in line or not line.strip():
+            continue
+        parts = line.split()
+        if len(parts) >= 2:
+            try:
+                coin = parts[0].upper()
+                amount = float(parts[1])
+                price = get_coin_price(coin)
+                value = amount * price
+                if value >= SPOT_MIN_VALUE:
+                    balances.append((coin, amount, value))
+            except (ValueError, IndexError):
+                continue
+    
+    if balances:
+        # 按市值降序排列
+        balances.sort(key=lambda x: x[2], reverse=True)
+        print(f"\n💰 现货余额 (≥{SPOT_MIN_VALUE}U):")
+        for coin, amount, value in balances:
+            print(f"   {coin}: {amount:.4f} (≈${value:.2f})")
+    else:
+        print(f"\n💰 没有≥{SPOT_MIN_VALUE}U的现货余额")
 
 
 def show_earn_position(exchange: str):
@@ -88,6 +123,9 @@ def manage_earn():
 
     display_name = get_exchange_display_name(exchange)
     print(f"\n已选择账号: {display_name}")
+    
+    # 自动显示现货余额
+    show_spot_balances(exchange)
 
     while True:
         action = select_option(f"币安理财 [{display_name}]:", ["查询持仓", "申购活期", "赎回活期", "切换账号", "返回主菜单"])
@@ -105,6 +143,7 @@ def manage_earn():
                 exchange = new_exchange
                 display_name = get_exchange_display_name(exchange)
                 print(f"\n已切换到: {display_name}")
+                show_spot_balances(exchange)
             continue
         else:
             break
