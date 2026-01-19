@@ -100,10 +100,21 @@ def do_withdraw():
         print(f"\n❌ 错误: REAP地址只能提现USDC，不能提现{coin}")
         return
     
-    # 显示余额
+    # 显示余额（同时查询现货和统一账户）
     print(f"\n正在查询 {coin} 余额...")
-    balance = get_coin_balance(exchange, coin)
-    print(f"💰 {coin} 可用余额: {balance}")
+    
+    if exchange_base == "bybit":
+        # Bybit: 查询 FUND 和 UNIFIED 账户
+        fund_bal = get_coin_balance(exchange, coin, "FUND")
+        unified_bal = get_coin_balance(exchange, coin, "UNIFIED")
+        print(f"💰 {coin} 资金账户: {fund_bal}")
+        print(f"💰 {coin} 统一账户: {unified_bal}")
+    elif exchange_base == "binance":
+        # Binance: 查询 SPOT 和 PM (Portfolio Margin) 账户
+        spot_bal = get_coin_balance(exchange, coin, "SPOT")
+        pm_bal = get_coin_balance(exchange, coin, "PM")
+        print(f"💰 {coin} 现货账户: {spot_bal}")
+        print(f"💰 {coin} 统一账户: {pm_bal}")
 
     # 处理地址和网络
     # REAP地址强制使用Polygon网络，优先处理，不进入任何网络选择逻辑
@@ -174,41 +185,21 @@ def do_withdraw():
     if amount is None:
         return
     
-    # Bybit自动从统一账户划转到资金账户（如果需要）
+    # 自动从统一账户划转到现货/资金账户（如果需要）
+    required_amount = float(amount) + 2  # 预留手续费
+    
     if exchange_base == "bybit":
-        # 查询资金账户余额
-        fund_output = run_on_ec2(f"balance {exchange}")
-        coin_upper = coin.upper()
-        fund_balance = 0.0
+        # Bybit: 查询资金账户余额
+        fund_balance = float(get_coin_balance(exchange, coin, "FUND") or 0)
         
-        for line in fund_output.split('\n'):
-            line_upper = line.upper()
-            if line_upper.startswith(coin_upper + '\t') or line_upper.startswith(coin_upper + ' '):
-                parts = line.split()
-                if len(parts) >= 2:
-                    try:
-                        fund_balance = float(parts[1])
-                    except ValueError:
-                        pass
-                break
-        
-        # 如果资金账户余额不足（考虑手续费，预留2个单位），从统一账户划转
-        required_amount = float(amount) + 2  # 预留手续费
+        # 如果资金账户余额不足，从统一账户划转
         if fund_balance < required_amount:
-            # 查询统一账户余额
-            unified_output = run_on_ec2(f"account_balance bybit UNIFIED {coin}").strip()
-            unified_balance = 0.0
-            if unified_output and not unified_output.startswith("用法") and not unified_output.startswith("未知"):
-                try:
-                    unified_balance = float(unified_output)
-                except ValueError:
-                    pass
+            unified_balance = float(get_coin_balance(exchange, coin, "UNIFIED") or 0)
             
-            # 如果需要划转
             if unified_balance > 0:
                 transfer_amount = required_amount - fund_balance
                 if transfer_amount > unified_balance:
-                    transfer_amount = unified_balance  # 最多划转统一账户的全部余额
+                    transfer_amount = unified_balance
                 
                 print(f"\n⚠️  资金账户余额不足 ({fund_balance} {coin})，需要约 {required_amount} {coin}（含手续费）")
                 print(f"   统一账户余额: {unified_balance} {coin}")
@@ -216,8 +207,28 @@ def do_withdraw():
                 
                 transfer_result = run_on_ec2(f"transfer bybit UNIFIED FUND {coin} {transfer_amount}")
                 print(transfer_result)
+                time.sleep(1)
+    
+    elif exchange_base == "binance":
+        # Binance: 查询现货账户余额
+        spot_balance = float(get_coin_balance(exchange, coin, "SPOT") or 0)
+        
+        # 如果现货账户余额不足，从统一账户(Portfolio Margin)划转
+        if spot_balance < required_amount:
+            pm_balance = float(get_coin_balance(exchange, coin, "PM") or 0)
+            
+            if pm_balance > 0:
+                transfer_amount = required_amount - spot_balance
+                if transfer_amount > pm_balance:
+                    transfer_amount = pm_balance
                 
-                # 等待一下让划转完成
+                print(f"\n⚠️  现货账户余额不足 ({spot_balance} {coin})，需要约 {required_amount} {coin}（含手续费）")
+                print(f"   统一账户余额: {pm_balance} {coin}")
+                print(f"   正在从统一账户划转 {transfer_amount} {coin} 到现货账户...")
+                
+                # Binance 使用 PORTFOLIO_MARGIN 和 MAIN 作为类型名
+                transfer_result = run_on_ec2(f"transfer {exchange} PORTFOLIO_MARGIN MAIN {coin} {transfer_amount}")
+                print(transfer_result)
                 time.sleep(1)
 
     # 确认
