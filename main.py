@@ -11,6 +11,7 @@ from transfer import do_transfer
 from earn import manage_earn
 from trade import do_trade_usdcusdt
 from addresses import manage_addresses
+from bnb_tools import manage_bnb_tools
 
 
 def main():
@@ -25,6 +26,7 @@ def main():
             "账户划转",
             "币安理财",
             "USDT-USDC交易",
+            "BNB工具",
             "管理地址簿",
             "退出"
         ])
@@ -35,6 +37,7 @@ def main():
             do_transfer,
             manage_earn,
             do_trade_usdcusdt,
+            manage_bnb_tools,
             manage_addresses,
         ]
 
