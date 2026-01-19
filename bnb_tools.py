@@ -17,16 +17,24 @@ def toggle_bnb_burn():
     action = select_option("选择操作:", [
         "开启现货手续费 BNB 抵扣",
         "关闭现货手续费 BNB 抵扣",
+        "开启杠杆利息 BNB 抵扣",
+        "关闭杠杆利息 BNB 抵扣",
         "返回"
     ], allow_back=True)
     
-    if action == -1 or action == 2:
+    if action == -1 or action == 4:
         return
     
-    enable = "true" if action == 0 else "false"
-    
-    print(f"\n正在{'开启' if action == 0 else '关闭'} BNB 抵扣...")
-    output = run_on_ec2(f"bnb_burn_toggle {exchange} {enable}")
+    if action in [0, 1]:
+        # 现货手续费
+        enable = "true" if action == 0 else "false"
+        print(f"\n正在{'开启' if action == 0 else '关闭'}现货手续费 BNB 抵扣...")
+        output = run_on_ec2(f"bnb_burn_toggle {exchange} spot {enable}")
+    else:
+        # 杠杆利息
+        enable = "true" if action == 2 else "false"
+        print(f"\n正在{'开启' if action == 2 else '关闭'}杠杆利息 BNB 抵扣...")
+        output = run_on_ec2(f"bnb_burn_toggle {exchange} interest {enable}")
     print(output)
 
 
