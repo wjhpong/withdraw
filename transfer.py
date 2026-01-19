@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """账户划转"""
 
-from utils import run_on_ec2, select_option, input_amount
+from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, input_amount
 from balance import get_coin_balance
 
 
 def do_transfer():
     """账户划转"""
-    ex_idx = select_option("请选择交易所:", ["BINANCE", "BYBIT"], allow_back=True)
-    if ex_idx == -1:
+    exchange = select_exchange()
+    if not exchange:
         return
-    exchanges = ["binance", "bybit"]
-    exchange = exchanges[ex_idx]
     
-    if exchange == "binance":
+    exchange_base = get_exchange_base(exchange)
+    
+    if exchange_base == "binance":
         account_types = ["SPOT", "FUNDING"]
         account_names = ["现货账户", "资金账户"]
     else:
@@ -33,7 +33,7 @@ def do_transfer():
     
     # 显示源账户所有余额
     print(f"\n正在查询 {from_type} 账户余额...")
-    if exchange == "bybit":
+    if exchange_base == "bybit":
         if from_type == "UNIFIED":
             # 统一账户使用 wallet-balance
             output = run_on_ec2(f"balance {exchange}")

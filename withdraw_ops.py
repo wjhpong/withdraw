@@ -2,7 +2,7 @@
 """提现操作"""
 
 import time
-from utils import run_on_ec2, select_option, input_amount, get_networks_for_type, get_networks_for_coin, detect_address_type
+from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, input_amount, get_networks_for_type, get_networks_for_coin, detect_address_type
 from addresses import load_addresses
 from balance import get_coin_balance
 
@@ -12,14 +12,14 @@ def do_withdraw():
     addresses = load_addresses()
     
     # 选择交易所
-    ex_idx = select_option("请选择交易所:", ["BINANCE", "BYBIT"], allow_back=True)
-    if ex_idx == -1:
+    exchange = select_exchange()
+    if not exchange:
         return
-    exchanges = ["binance", "bybit"]
-    exchange = exchanges[ex_idx]
+    
+    exchange_base = get_exchange_base(exchange)
 
-    # 过滤出当前交易所可用的地址
-    available_addresses = [a for a in addresses if a.get('exchange') is None or a.get('exchange') == exchange]
+    # 过滤出当前交易所可用的地址 (binance/binance2 共享地址)
+    available_addresses = [a for a in addresses if a.get('exchange') is None or a.get('exchange') == exchange_base]
 
     # 选择地址
     selected = None
@@ -163,7 +163,7 @@ def do_withdraw():
         return
     
     # Bybit自动从统一账户划转到资金账户（如果需要）
-    if exchange == "bybit":
+    if exchange_base == "bybit":
         # 查询资金账户余额
         fund_output = run_on_ec2(f"balance {exchange}")
         coin_upper = coin.upper()
@@ -227,7 +227,7 @@ def do_withdraw():
     # 执行提现
     print("\n正在提交提现请求...")
     # Bybit 地址需要小写（与保存的地址格式匹配）
-    if exchange == "bybit":
+    if exchange_base == "bybit":
         address = address.lower()
     cmd = f'withdraw {exchange} {coin} {network} {address} {amount}'
     if memo:

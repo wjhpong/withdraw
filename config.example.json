@@ -1,11 +1,15 @@
 {
   "binance": {
-    "api_key": "MEyRWwesdlTcsFRf6Pth1n4LfsTS24S1ZWv1pqDqnq8Aajm21PFHZpiiyKJw4dmL",
-    "api_secret": "rWLbYPdh2t8f8UwZig4kEqiWbjMMS8fDwcWI0TidCiff5HmzpM3BbNvJcHrEP49h"
+    "api_key": "YOUR_BINANCE_API_KEY",
+    "api_secret": "YOUR_BINANCE_API_SECRET"
+  },
+  "binance2": {
+    "api_key": "YOUR_SECOND_BINANCE_API_KEY",
+    "api_secret": "YOUR_SECOND_BINANCE_API_SECRET"
   },
   "bybit": {
-    "api_key": "Bdy776ipHBVnIKaXLW",
-    "api_secret": "SDubDwQyLF88Hc1ajDx1PipQs43QmLPxfcun"
+    "api_key": "YOUR_BYBIT_API_KEY",
+    "api_secret": "YOUR_BYBIT_API_SECRET"
   },
   "ssh": {
     "host": "tixian",

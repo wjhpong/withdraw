@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 """余额查询"""
 
-from utils import run_on_ec2, select_option
+from utils import run_on_ec2, select_option, select_exchange, get_exchange_base
 
 
 def show_balance():
     """查询余额"""
-    ex_idx = select_option("请选择交易所:", ["BINANCE", "BYBIT"], allow_back=True)
-    if ex_idx == -1:
+    exchange = select_exchange()
+    if not exchange:
         return
     
-    exchanges = ["binance", "bybit"]
-    exchange = exchanges[ex_idx]
-    
+    exchange_base = get_exchange_base(exchange)
     print(f"\n正在查询 {exchange.upper()} 余额...")
     
     # Bybit需要同时查询统一账户和资金账户
-    if exchange == "bybit":
+    if exchange_base == "bybit":
         # 查询资金账户余额
         fund_output = run_on_ec2(f"balance {exchange}")
         
@@ -102,13 +100,14 @@ def show_balance():
             except (ValueError, IndexError):
                 continue
     
-    if not has_balance and exchange != "bybit":
+    if not has_balance and exchange_base != "bybit":
         print("\n⚠️  当前账户暂无余额")
 
 
 def get_coin_balance(exchange: str, coin: str) -> str:
     """查询指定币种余额（Bybit包括统一账户和资金账户总和）"""
-    if exchange == "bybit":
+    exchange_base = get_exchange_base(exchange)
+    if exchange_base == "bybit":
         # Bybit需要查询资金账户和统一账户的总和
         # 查询资金账户余额
         fund_output = run_on_ec2(f"balance {exchange}")

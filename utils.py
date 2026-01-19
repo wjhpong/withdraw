@@ -14,6 +14,13 @@ CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 # 默认SSH配置
 DEFAULT_EC2_HOST = "tixian"
 
+# 交易所列表 (支持多账号)
+EXCHANGES = [
+    ("binance", "BINANCE (主账号)"),
+    ("binance2", "BINANCE (二号)"),
+    ("bybit", "BYBIT"),
+]
+
 # 网络列表
 EVM_NETWORKS = ["ERC20", "BSC", "ARBITRUM", "OPTIMISM", "MATIC", "BASE", "LINEA", "ZKSYNCERA", "SCROLL", "AVAXC", "FTM", "MANTLE", "BLAST", "MANTA", "CELO"]
 TRC_NETWORKS = ["TRC20"]
@@ -156,3 +163,29 @@ def detect_address_type(address: str) -> str:
     elif 32 <= len(address) <= 44:
         return "sol"
     return "other"
+
+
+def select_exchange(allow_back: bool = True, binance_only: bool = False, bybit_only: bool = False):
+    """选择交易所，返回 exchange_key 或 None"""
+    if binance_only:
+        options = [(k, n) for k, n in EXCHANGES if k.startswith("binance")]
+    elif bybit_only:
+        options = [(k, n) for k, n in EXCHANGES if k == "bybit"]
+    else:
+        options = EXCHANGES
+    
+    if len(options) == 1:
+        return options[0][0]
+    
+    display_names = [n for _, n in options]
+    idx = select_option("请选择交易所:", display_names, allow_back=allow_back)
+    if idx == -1:
+        return None
+    return options[idx][0]
+
+
+def get_exchange_base(exchange: str) -> str:
+    """获取交易所基础类型 (binance/binance2 都返回 binance)"""
+    if exchange.startswith("binance"):
+        return "binance"
+    return exchange
