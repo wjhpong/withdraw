@@ -16,10 +16,12 @@ def do_transfer():
     if exchange_base == "binance":
         # Binance 提供多种划转选项
         transfer_options = [
-            ("SPOT", "UMFUTURE", "现货 → U本位合约"),
-            ("UMFUTURE", "SPOT", "U本位合约 → 现货"),
-            ("SPOT", "FUNDING", "现货 → 资金账户"),
-            ("FUNDING", "SPOT", "资金账户 → 现货"),
+            ("MAIN", "PORTFOLIO_MARGIN", "现货 → 统一账户"),
+            ("PORTFOLIO_MARGIN", "MAIN", "统一账户 → 现货"),
+            ("MAIN", "UMFUTURE", "现货 → U本位合约"),
+            ("UMFUTURE", "MAIN", "U本位合约 → 现货"),
+            ("MAIN", "FUNDING", "现货 → 资金账户"),
+            ("FUNDING", "MAIN", "资金账户 → 现货"),
         ]
         option_names = [opt[2] for opt in transfer_options]
         transfer_idx = select_option("选择划转方向:", option_names, allow_back=True)
