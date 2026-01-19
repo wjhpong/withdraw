@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""BNB 工具 - 抵扣开关和小额资产转换"""
+"""BNB 工具 - 抵扣开关、小额资产转换、市价买入"""
 
-from utils import run_on_ec2, select_option, select_exchange
+from utils import run_on_ec2, select_option, select_exchange, input_amount
 
 
 def toggle_bnb_burn():
@@ -61,12 +61,61 @@ def convert_dust_to_bnb():
     print(output)
 
 
+def buy_bnb_market():
+    """市价单买入 BNB"""
+    exchange = select_exchange(binance_only=True)
+    if not exchange:
+        return
+    
+    # 选择支付币种
+    pay_coin_idx = select_option("选择支付币种:", ["USDT", "USDC", "FDUSD"], allow_back=True)
+    if pay_coin_idx == -1:
+        return
+    pay_coins = ["USDT", "USDC", "FDUSD"]
+    pay_coin = pay_coins[pay_coin_idx]
+    
+    # 查询余额
+    print(f"\n正在查询 {pay_coin} 余额...")
+    output = run_on_ec2(f"balance {exchange}")
+    
+    # 解析余额
+    balance = "0"
+    for line in output.split('\n'):
+        if line.upper().startswith(pay_coin):
+            parts = line.split()
+            if len(parts) >= 2:
+                balance = parts[1]
+                break
+    print(f"💰 {pay_coin} 可用余额: {balance}")
+    
+    # 查询 BNB 当前价格
+    print(f"\n正在查询 BNB/{pay_coin} 价格...")
+    output = run_on_ec2(f"bnb_price {exchange} {pay_coin}")
+    print(output)
+    
+    # 输入金额
+    amount = input_amount(f"请输入支付 {pay_coin} 金额:")
+    if amount is None:
+        return
+    
+    # 确认
+    confirm = select_option(f"确认用 {amount} {pay_coin} 市价买入 BNB?", ["确认买入", "取消"], allow_back=True)
+    if confirm != 0:
+        print("已取消")
+        return
+    
+    print(f"\n正在市价买入 BNB...")
+    output = run_on_ec2(f"buy_bnb {exchange} {pay_coin} {amount}")
+    print(output)
+
+
 def manage_bnb_tools():
     """BNB 工具菜单"""
     while True:
         action = select_option("BNB 工具:", [
             "BNB 抵扣开关",
             "小额资产转 BNB",
+            "市价买入 BNB",
             "返回主菜单"
         ])
         
@@ -74,6 +123,8 @@ def manage_bnb_tools():
             toggle_bnb_burn()
         elif action == 1:
             convert_dust_to_bnb()
+        elif action == 2:
+            buy_bnb_market()
         else:
             break
         
