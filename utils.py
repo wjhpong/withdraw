@@ -16,8 +16,8 @@ DEFAULT_EC2_HOST = "tixian"
 
 # 交易所列表 (支持多账号)
 EXCHANGES = [
-    ("binance", "BINANCE (主账号)"),
-    ("binance2", "BINANCE (二号)"),
+    ("binance", "BINANCE - Dennis"),
+    ("binance2", "BINANCE - Vanie"),
     ("bybit", "BYBIT"),
 ]
 
