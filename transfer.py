@@ -2,7 +2,6 @@
 """账户划转"""
 
 from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name, input_amount
-from balance import get_coin_balance
 
 
 def do_transfer():
@@ -12,62 +11,42 @@ def do_transfer():
         return
     
     exchange_base = get_exchange_base(exchange)
+    display_name = get_exchange_display_name(exchange)
     
     if exchange_base == "binance":
-        account_types = ["SPOT", "UMFUTURE"]
-        account_names = ["现货账户", "U本位合约账户"]
+        # Binance 提供多种划转选项
+        transfer_options = [
+            ("SPOT", "UMFUTURE", "现货 → U本位合约"),
+            ("UMFUTURE", "SPOT", "U本位合约 → 现货"),
+            ("SPOT", "FUNDING", "现货 → 资金账户"),
+            ("FUNDING", "SPOT", "资金账户 → 现货"),
+        ]
+        option_names = [opt[2] for opt in transfer_options]
+        transfer_idx = select_option("选择划转方向:", option_names, allow_back=True)
+        if transfer_idx == -1:
+            return
+        from_type = transfer_options[transfer_idx][0]
+        to_type = transfer_options[transfer_idx][1]
     else:
-        account_types = ["UNIFIED", "FUND"]
-        account_names = ["统一账户", "资金账户"]
+        # Bybit: 统一账户 ↔ 资金账户
+        transfer_options = [
+            ("UNIFIED", "FUND", "统一账户 → 资金账户"),
+            ("FUND", "UNIFIED", "资金账户 → 统一账户"),
+        ]
+        option_names = [opt[2] for opt in transfer_options]
+        transfer_idx = select_option("选择划转方向:", option_names, allow_back=True)
+        if transfer_idx == -1:
+            return
+        from_type = transfer_options[transfer_idx][0]
+        to_type = transfer_options[transfer_idx][1]
     
-    # 选择划转方向
-    from_options = [f"{account_names[i]} → {account_names[1-i]}" for i in range(2)]
-    from_idx = select_option("选择划转方向:", from_options, allow_back=True)
-    if from_idx == -1:
-        return
-    from_type = account_types[from_idx]
-    to_type = account_types[1 - from_idx]
+    print(f"\n📤 从: {from_type}")
+    print(f"📥 到: {to_type}")
     
-    print(f"\n📤 从: {account_names[from_idx]} ({from_type})")
-    print(f"📥 到: {account_names[1-from_idx]} ({to_type})")
-    
-    # 显示源账户所有余额
+    # 显示源账户余额
     print(f"\n正在查询 {from_type} 账户余额...")
-    if exchange_base == "bybit":
-        if from_type == "UNIFIED":
-            # 统一账户使用 wallet-balance
-            output = run_on_ec2(f"balance {exchange}")
-            # 解析输出，显示统一账户部分
-            print(f"\n💰 {account_names[from_idx]} ({from_type}) 余额:")
-            in_balance = False
-            for line in output.split('\n'):
-                if '可用' in line or '----' in line:
-                    in_balance = True
-                if in_balance and line.strip():
-                    # 跳过标题行
-                    if '币种' not in line and '---' not in line and '正在查询' not in line:
-                        print(f"   {line}")
-        else:
-            # 资金账户
-            output = run_on_ec2(f"balance {exchange}")
-            print(f"\n💰 {account_names[from_idx]} ({from_type}) 余额:")
-            in_balance = False
-            for line in output.split('\n'):
-                if '可用' in line or '----' in line:
-                    in_balance = True
-                if in_balance and line.strip():
-                    if '币种' not in line and '---' not in line and '正在查询' not in line:
-                        print(f"   {line}")
-    else:
-        output = run_on_ec2(f"balance {exchange}")
-        print(f"\n💰 {account_names[from_idx]} 余额:")
-        in_balance = False
-        for line in output.split('\n'):
-            if '可用' in line or '----' in line:
-                in_balance = True
-            if in_balance and line.strip():
-                if '币种' not in line and '---' not in line and '正在查询' not in line:
-                    print(f"   {line}")
+    output = run_on_ec2(f"balance {exchange}")
+    print(output)
     
     # 输入币种
     coin = input("\n请输入要划转的币种 (如 USDT, 输入 0 返回): ").strip().upper()
@@ -80,7 +59,6 @@ def do_transfer():
         return
     
     # 确认
-    display_name = get_exchange_display_name(exchange)
     print("\n" + "=" * 50)
     print("请确认划转信息:")
     print(f"  交易所: {display_name}")
