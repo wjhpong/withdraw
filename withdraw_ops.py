@@ -18,8 +18,20 @@ def do_withdraw():
     
     exchange_base = get_exchange_base(exchange)
 
-    # 过滤出当前交易所可用的地址 (binance/binance2 共享地址)
-    available_addresses = [a for a in addresses if a.get('exchange') is None or a.get('exchange') == exchange_base]
+    # 过滤出当前交易所/账户可用的地址
+    available_addresses = []
+    for a in addresses:
+        # 如果有 accounts 限制，检查当前账户是否在列表中
+        if a.get('accounts'):
+            if exchange in a['accounts']:
+                available_addresses.append(a)
+        # 如果有 exchange 限制（旧格式），检查交易所类型
+        elif a.get('exchange'):
+            if a['exchange'] == exchange_base:
+                available_addresses.append(a)
+        # 没有限制，所有账户都可见
+        else:
+            available_addresses.append(a)
 
     # 选择地址
     selected = None
