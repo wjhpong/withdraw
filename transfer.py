@@ -31,19 +31,48 @@ def do_transfer():
     print(f"\n📤 从: {account_names[from_idx]} ({from_type})")
     print(f"📥 到: {account_names[1-from_idx]} ({to_type})")
     
+    # 显示源账户所有余额
+    print(f"\n正在查询 {from_type} 账户余额...")
+    if exchange == "bybit":
+        if from_type == "UNIFIED":
+            # 统一账户使用 wallet-balance
+            output = run_on_ec2(f"balance {exchange}")
+            # 解析输出，显示统一账户部分
+            print(f"\n💰 {account_names[from_idx]} ({from_type}) 余额:")
+            in_balance = False
+            for line in output.split('\n'):
+                if '可用' in line or '----' in line:
+                    in_balance = True
+                if in_balance and line.strip():
+                    # 跳过标题行
+                    if '币种' not in line and '---' not in line and '正在查询' not in line:
+                        print(f"   {line}")
+        else:
+            # 资金账户
+            output = run_on_ec2(f"balance {exchange}")
+            print(f"\n💰 {account_names[from_idx]} ({from_type}) 余额:")
+            in_balance = False
+            for line in output.split('\n'):
+                if '可用' in line or '----' in line:
+                    in_balance = True
+                if in_balance and line.strip():
+                    if '币种' not in line and '---' not in line and '正在查询' not in line:
+                        print(f"   {line}")
+    else:
+        output = run_on_ec2(f"balance {exchange}")
+        print(f"\n💰 {account_names[from_idx]} 余额:")
+        in_balance = False
+        for line in output.split('\n'):
+            if '可用' in line or '----' in line:
+                in_balance = True
+            if in_balance and line.strip():
+                if '币种' not in line and '---' not in line and '正在查询' not in line:
+                    print(f"   {line}")
+    
     # 输入币种
-    coin = input("\n请输入币种 (如 USDT, 输入 0 返回): ").strip().upper()
+    coin = input("\n请输入要划转的币种 (如 USDT, 输入 0 返回): ").strip().upper()
     if not coin or coin == "0":
         return
-    
-    # 显示源账户余额
-    print(f"\n正在查询 {from_type} 账户的 {coin} 余额...")
-    if exchange == "bybit":
-        output = run_on_ec2(f"account_balance bybit {from_type} {coin}")
-        balance = output.strip()
-    else:
-        balance = get_coin_balance(exchange, coin)
-    print(f"💰 {from_type} 账户 {coin} 余额: {balance}")
     
     # 输入数量
     amount = input_amount("请输入划转数量:")

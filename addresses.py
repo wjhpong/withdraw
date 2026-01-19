@@ -32,7 +32,13 @@ def manage_addresses():
             for i, addr in enumerate(addresses, 1):
                 addr_type = addr.get('type', 'unknown').upper()
                 memo_str = f" (Memo: {addr['memo']})" if addr.get('memo') else ""
-                print(f"  {i}. [{addr['name']}] ({addr_type}) {addr['address'][:25]}...{memo_str}")
+                # circle和REAP地址显示特殊标记
+                coin_restriction = ""
+                if addr.get('name', '').lower() == 'circle':
+                    coin_restriction = " - 仅USDC"
+                elif addr.get('name', '').lower() == 'reap':
+                    coin_restriction = " - 仅USDC"
+                print(f"  {i}. [{addr['name']}] ({addr_type}) {addr['address'][:25]}...{coin_restriction}{memo_str}")
         else:
             print("  (暂无保存的地址)")
         
