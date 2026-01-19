@@ -14,8 +14,8 @@ def do_transfer():
     exchange_base = get_exchange_base(exchange)
     
     if exchange_base == "binance":
-        account_types = ["SPOT", "FUNDING"]
-        account_names = ["现货账户", "资金账户"]
+        account_types = ["SPOT", "UMFUTURE"]
+        account_names = ["现货账户", "U本位合约账户"]
     else:
         account_types = ["UNIFIED", "FUND"]
         account_names = ["统一账户", "资金账户"]
