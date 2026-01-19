@@ -109,13 +109,54 @@ def buy_bnb_market():
     print(output)
 
 
+def quick_buy_bnb_usdt():
+    """快捷小额 USDT 买 BNB"""
+    exchange = select_exchange(binance_only=True)
+    if not exchange:
+        return
+    
+    # 查询 USDT 余额和 BNB 价格
+    print(f"\n正在查询...")
+    output = run_on_ec2(f"balance {exchange}")
+    
+    # 解析 USDT 余额
+    usdt_balance = "0"
+    for line in output.split('\n'):
+        if line.upper().startswith("USDT"):
+            parts = line.split()
+            if len(parts) >= 2:
+                usdt_balance = parts[1]
+                break
+    
+    # 查询 BNB 价格
+    price_output = run_on_ec2(f"bnb_price {exchange} USDT")
+    print(f"💰 USDT 可用: {usdt_balance}")
+    print(price_output)
+    
+    # 直接输入金额
+    amount = input_amount("请输入 USDT 金额 (小额即可):")
+    if amount is None:
+        return
+    
+    # 确认
+    confirm = select_option(f"确认用 {amount} USDT 市价买入 BNB?", ["确认买入", "取消"], allow_back=True)
+    if confirm != 0:
+        print("已取消")
+        return
+    
+    print(f"\n正在市价买入 BNB...")
+    output = run_on_ec2(f"buy_bnb {exchange} USDT {amount}")
+    print(output)
+
+
 def manage_bnb_tools():
     """BNB 工具菜单"""
     while True:
         action = select_option("BNB 工具:", [
             "BNB 抵扣开关",
             "小额资产转 BNB",
-            "市价买入 BNB",
+            "小额 USDT 买 BNB",
+            "市价买入 BNB (选币种)",
             "返回主菜单"
         ])
         
@@ -124,6 +165,8 @@ def manage_bnb_tools():
         elif action == 1:
             convert_dust_to_bnb()
         elif action == 2:
+            quick_buy_bnb_usdt()
+        elif action == 3:
             buy_bnb_market()
         else:
             break
