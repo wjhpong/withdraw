@@ -77,12 +77,12 @@ def manage_earn():
     exchange = select_exchange(binance_only=True)
     if not exchange:
         return
-    
+
     display_name = get_exchange_display_name(exchange)
     print(f"\n已选择账号: {display_name}")
-    
+
     while True:
-        action = select_option("币安理财操作:", ["查询持仓", "申购活期", "赎回活期", "返回主菜单"])
+        action = select_option(f"币安理财 [{display_name}]:", ["查询持仓", "申购活期", "赎回活期", "切换账号", "返回主菜单"])
         
         if action == 0:
             show_earn_position(exchange)
@@ -90,7 +90,15 @@ def manage_earn():
             do_earn_subscribe(exchange)
         elif action == 2:
             do_earn_redeem(exchange)
+        elif action == 3:
+            # 切换账号
+            new_exchange = select_exchange(binance_only=True)
+            if new_exchange:
+                exchange = new_exchange
+                display_name = get_exchange_display_name(exchange)
+                print(f"\n已切换到: {display_name}")
+            continue
         else:
             break
-        
+
         input("\n按回车继续...")
