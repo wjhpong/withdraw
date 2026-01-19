@@ -19,6 +19,14 @@ def do_earn_subscribe(exchange: str):
     if not coin or coin == "0":
         return
     
+    # 查询理财产品信息和剩余额度
+    print(f"\n正在查询 {coin} 活期理财信息...")
+    output = run_on_ec2(f"earn quota {exchange} {coin}")
+    print(output)
+    
+    if "没有找到" in output or "错误" in output:
+        return
+    
     print(f"\n正在查询 {coin} 现货余额...")
     balance = get_coin_balance(exchange, coin)
     print(f"💰 {coin} 现货余额: {balance}")
