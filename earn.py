@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """币安理财操作"""
 
-from utils import run_on_ec2, select_option, select_exchange, input_amount
+from utils import run_on_ec2, select_option, select_exchange, get_exchange_display_name, input_amount
 from balance import get_coin_balance
 
 
 def show_earn_position(exchange: str):
     """查询理财持仓"""
-    print(f"\n正在查询 {exchange.upper()} 理财持仓...")
+    display_name = get_exchange_display_name(exchange)
+    print(f"\n正在查询 {display_name} 理财持仓...")
     output = run_on_ec2(f"earn position {exchange}")
     print(output)
 
@@ -77,7 +78,8 @@ def manage_earn():
     if not exchange:
         return
     
-    print(f"\n已选择账号: {exchange.upper()}")
+    display_name = get_exchange_display_name(exchange)
+    print(f"\n已选择账号: {display_name}")
     
     while True:
         action = select_option("币安理财操作:", ["查询持仓", "申购活期", "赎回活期", "返回主菜单"])

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """余额查询"""
 
-from utils import run_on_ec2, select_option, select_exchange, get_exchange_base
+from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name
 
 
 def show_balance():
@@ -11,7 +11,8 @@ def show_balance():
         return
     
     exchange_base = get_exchange_base(exchange)
-    print(f"\n正在查询 {exchange.upper()} 余额...")
+    display_name = get_exchange_display_name(exchange)
+    print(f"\n正在查询 {display_name} 余额...")
     
     # Bybit需要同时查询统一账户和资金账户
     if exchange_base == "bybit":

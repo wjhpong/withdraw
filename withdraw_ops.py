@@ -2,7 +2,7 @@
 """提现操作"""
 
 import time
-from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, input_amount, get_networks_for_type, get_networks_for_coin, detect_address_type
+from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name, input_amount, get_networks_for_type, get_networks_for_coin, detect_address_type
 from addresses import load_addresses
 from balance import get_coin_balance
 
@@ -209,9 +209,10 @@ def do_withdraw():
                 time.sleep(1)
 
     # 确认
+    display_name = get_exchange_display_name(exchange)
     print("\n" + "=" * 50)
     print("请确认提现信息:")
-    print(f"  交易所: {exchange.upper()}")
+    print(f"  交易所: {display_name}")
     print(f"  币种: {coin}")
     print(f"  网络: {network}")
     print(f"  地址: {address}")

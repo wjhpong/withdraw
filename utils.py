@@ -189,3 +189,11 @@ def get_exchange_base(exchange: str) -> str:
     if exchange.startswith("binance"):
         return "binance"
     return exchange
+
+
+def get_exchange_display_name(exchange: str) -> str:
+    """获取交易所的显示名称"""
+    for key, name in EXCHANGES:
+        if key == exchange:
+            return name
+    return exchange.upper()

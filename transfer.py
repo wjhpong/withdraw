@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """账户划转"""
 
-from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, input_amount
+from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name, input_amount
 from balance import get_coin_balance
 
 
@@ -80,9 +80,10 @@ def do_transfer():
         return
     
     # 确认
+    display_name = get_exchange_display_name(exchange)
     print("\n" + "=" * 50)
     print("请确认划转信息:")
-    print(f"  交易所: {exchange.upper()}")
+    print(f"  交易所: {display_name}")
     print(f"  从: {from_type}")
     print(f"  到: {to_type}")
     print(f"  币种: {coin}")
