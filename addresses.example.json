@@ -1,0 +1,16 @@
+{
+  "addresses": [
+    {
+      "name": "my-evm-wallet",
+      "address": "0x1234567890abcdef1234567890abcdef12345678",
+      "type": "evm",
+      "memo": null
+    },
+    {
+      "name": "my-sol-wallet",
+      "address": "DrekLMzUTniTBoh3p9aid6qgnSm8zth6h2QuCkEoKYdm",
+      "type": "sol",
+      "memo": null
+    }
+  ]
+}

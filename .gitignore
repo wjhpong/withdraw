@@ -1,0 +1,9 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# 敏感配置（API密钥）
+config.json
+
+# 个人地址簿
+addresses.json
