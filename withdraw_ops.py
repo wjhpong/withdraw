@@ -119,6 +119,10 @@ def do_withdraw(exchange: str = None):
         # Gate.io: 查询 SPOT 现货账户
         spot_bal = get_coin_balance(exchange, coin, "SPOT")
         print(f"💰 {coin} 现货账户: {spot_bal}")
+    elif exchange_base == "bitget":
+        # Bitget: 查询现货账户
+        spot_bal = get_coin_balance(exchange, coin, "SPOT")
+        print(f"💰 {coin} 现货账户: {spot_bal}")
 
     # 处理地址和网络
     # REAP地址强制使用Polygon网络，优先处理，不进入任何网络选择逻辑

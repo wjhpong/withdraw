@@ -144,6 +144,20 @@ def get_coin_balance(exchange: str, coin: str, account_type: str = "SPOT") -> st
                         pass
                 break
         return "0"
+    elif exchange_base == "bitget":
+        # Bitget - 从 balance 输出中解析
+        output = run_on_ec2(f"balance {exchange}")
+        for line in output.split('\n'):
+            line_upper = line.upper()
+            if line_upper.startswith(coin_upper + '\t') or line_upper.startswith(coin_upper + ' '):
+                parts = line.split()
+                if len(parts) >= 2:
+                    try:
+                        return parts[1]
+                    except:
+                        pass
+                break
+        return "0"
     else:
         # Binance - 使用 account_balance 命令精确查询
         output = run_on_ec2(f"account_balance {exchange} {account_type} {coin}").strip()

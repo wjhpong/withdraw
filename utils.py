@@ -21,6 +21,7 @@ EXCHANGES = [
     ("binance3", "BINANCE - 柏青"),
     ("bybit", "BYBIT"),
     ("gate", "GATE.IO"),
+    ("bitget", "BITGET"),
 ]
 
 # 网络列表
@@ -192,6 +193,8 @@ def get_exchange_base(exchange: str) -> str:
         return "binance"
     if exchange.startswith("gate"):
         return "gate"
+    if exchange.startswith("bitget"):
+        return "bitget"
     return exchange
 
 
