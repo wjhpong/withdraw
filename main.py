@@ -5,11 +5,11 @@
 """
 
 from utils import select_option
-from balance import show_balance
+from balance import show_balance, show_pm_ratio
 from withdraw_ops import do_withdraw
 from transfer import do_transfer
 from earn import manage_earn
-from trade import do_trade_usdcusdt
+from trade import do_stablecoin_trade
 from addresses import manage_addresses
 from bnb_tools import manage_bnb_tools
 
@@ -25,8 +25,9 @@ def main():
             "提现",
             "账户划转",
             "币安理财",
-            "USDT-USDC交易",
+            "稳定币交易",
             "BNB工具",
+            "统一保证金率",
             "管理地址簿",
             "退出"
         ])
@@ -36,8 +37,9 @@ def main():
             do_withdraw,
             do_transfer,
             manage_earn,
-            do_trade_usdcusdt,
+            do_stablecoin_trade,
             manage_bnb_tools,
+            show_pm_ratio,
             manage_addresses,
         ]
 
