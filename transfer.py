@@ -27,13 +27,14 @@ def do_bitget_subaccount_transfer(exchange: str):
     sub_names = []
     for s in sub_accounts:
         uid = s.get('userId', '')
+        name = s.get('name', uid)  # 使用名称，没有则显示 UID
         # 计算该子账户总资产
         assets = s.get('assetsList', [])
         total = sum(float(a.get('available', 0)) for a in assets)
         if total > 0:
-            sub_names.append(f"UID: {uid} (有 {len(assets)} 种资产)")
+            sub_names.append(f"[{name}] UID: {uid} (有 {len(assets)} 种资产)")
         else:
-            sub_names.append(f"UID: {uid} (无资产)")
+            sub_names.append(f"[{name}] UID: {uid} (无资产)")
     
     sub_idx = select_option("选择子账户:", sub_names, allow_back=True)
     
@@ -42,10 +43,11 @@ def do_bitget_subaccount_transfer(exchange: str):
     
     selected_sub = sub_accounts[sub_idx]
     sub_uid = selected_sub.get('userId', '')
+    sub_name = selected_sub.get('name', sub_uid)
     assets_list = selected_sub.get('assetsList', [])
     
     # 显示子账户资产
-    print(f"\n📤 从: 子账户 [{sub_uid}]")
+    print(f"\n📤 从: 子账户 [{sub_name}] (UID: {sub_uid})")
     print(f"📥 到: 主账户")
     print("\n该子账户资产:")
     print("-" * 40)
@@ -87,7 +89,7 @@ def do_bitget_subaccount_transfer(exchange: str):
     print("\n" + "=" * 50)
     print("请确认划转信息:")
     print(f"  交易所: {display_name}")
-    print(f"  从: 子账户 [{sub_uid}]")
+    print(f"  从: 子账户 [{sub_name}] (UID: {sub_uid})")
     print(f"  到: 主账户")
     print(f"  币种: {coin}")
     print(f"  数量: {amount}")
