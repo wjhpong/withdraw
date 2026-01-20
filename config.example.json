@@ -11,6 +11,10 @@
     "api_key": "YOUR_BYBIT_API_KEY",
     "api_secret": "YOUR_BYBIT_API_SECRET"
   },
+  "gate": {
+    "api_key": "YOUR_GATE_API_KEY",
+    "api_secret": "YOUR_GATE_API_SECRET"
+  },
   "ssh": {
     "host": "tixian",
     "user": null,

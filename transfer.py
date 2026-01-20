@@ -25,6 +25,18 @@ def do_transfer():
             return
         from_type = transfer_options[transfer_idx][0]
         to_type = transfer_options[transfer_idx][1]
+    elif exchange_base == "gate":
+        # Gate.io: 现货 ↔ 合约
+        transfer_options = [
+            ("SPOT", "FUTURES", "现货 → 合约"),
+            ("FUTURES", "SPOT", "合约 → 现货"),
+        ]
+        option_names = [opt[2] for opt in transfer_options]
+        transfer_idx = select_option("选择划转方向:", option_names, allow_back=True)
+        if transfer_idx == -1:
+            return
+        from_type = transfer_options[transfer_idx][0]
+        to_type = transfer_options[transfer_idx][1]
     else:
         # Bybit: 统一账户 ↔ 资金账户
         transfer_options = [

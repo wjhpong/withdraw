@@ -20,6 +20,7 @@ EXCHANGES = [
     ("binance2", "BINANCE - Vanie"),
     ("binance3", "BINANCE - 柏青"),
     ("bybit", "BYBIT"),
+    ("gate", "GATE.IO"),
 ]
 
 # 网络列表
@@ -189,6 +190,8 @@ def get_exchange_base(exchange: str) -> str:
     """获取交易所基础类型 (binance/binance2 都返回 binance)"""
     if exchange.startswith("binance"):
         return "binance"
+    if exchange.startswith("gate"):
+        return "gate"
     return exchange
 
 
