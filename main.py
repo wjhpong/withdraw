@@ -36,42 +36,43 @@ def main():
             print("=" * 50)
             
             # 根据交易所类型构建菜单
+            # 使用默认参数 ex=exchange 来正确捕获当前 exchange 值
             if exchange_base == "binance":
                 options = [
-                    ("查询余额", lambda: show_balance(exchange)),
-                    ("提现", lambda: do_withdraw(exchange)),
-                    ("账户划转", lambda: do_transfer(exchange)),
-                    ("理财管理", lambda: manage_earn(exchange)),
-                    ("稳定币交易", lambda: do_stablecoin_trade(exchange)),
-                    ("BNB工具", lambda: manage_bnb_tools(exchange)),
-                    ("统一保证金率", lambda: show_pm_ratio(exchange)),
-                    ("管理地址簿", manage_addresses),
+                    ("查询余额", lambda ex=exchange: show_balance(ex)),
+                    ("提现", lambda ex=exchange: do_withdraw(ex)),
+                    ("账户划转", lambda ex=exchange: do_transfer(ex)),
+                    ("理财管理", lambda ex=exchange: manage_earn(ex)),
+                    ("稳定币交易", lambda ex=exchange: do_stablecoin_trade(ex)),
+                    ("BNB工具", lambda ex=exchange: manage_bnb_tools(ex)),
+                    ("统一保证金率", lambda ex=exchange: show_pm_ratio(ex)),
+                    ("管理地址簿", lambda ex=exchange: manage_addresses(ex)),
                     ("切换交易所", None),
                     ("退出", "exit"),
                 ]
             elif exchange_base == "gate":
                 options = [
-                    ("查询余额", lambda: show_balance(exchange)),
-                    ("提现", lambda: do_withdraw(exchange)),
-                    ("账户划转", lambda: do_transfer(exchange)),
-                    ("管理地址簿", manage_addresses),
+                    ("查询余额", lambda ex=exchange: show_balance(ex)),
+                    ("提现", lambda ex=exchange: do_withdraw(ex)),
+                    ("账户划转", lambda ex=exchange: do_transfer(ex)),
+                    ("管理地址簿", lambda ex=exchange: manage_addresses(ex)),
                     ("切换交易所", None),
                     ("退出", "exit"),
                 ]
             elif exchange_base == "bybit":
                 options = [
-                    ("查询余额", lambda: show_balance(exchange)),
-                    ("提现", lambda: do_withdraw(exchange)),
-                    ("账户划转", lambda: do_transfer(exchange)),
-                    ("管理地址簿", manage_addresses),
+                    ("查询余额", lambda ex=exchange: show_balance(ex)),
+                    ("提现", lambda ex=exchange: do_withdraw(ex)),
+                    ("账户划转", lambda ex=exchange: do_transfer(ex)),
+                    ("管理地址簿", lambda ex=exchange: manage_addresses(ex)),
                     ("切换交易所", None),
                     ("退出", "exit"),
                 ]
             else:
                 options = [
-                    ("查询余额", lambda: show_balance(exchange)),
-                    ("提现", lambda: do_withdraw(exchange)),
-                    ("管理地址簿", manage_addresses),
+                    ("查询余额", lambda ex=exchange: show_balance(ex)),
+                    ("提现", lambda ex=exchange: do_withdraw(ex)),
+                    ("管理地址簿", lambda ex=exchange: manage_addresses(ex)),
                     ("切换交易所", None),
                     ("退出", "exit"),
                 ]
