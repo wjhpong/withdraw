@@ -43,6 +43,7 @@ def do_bitget_subaccount_transfer(exchange: str):
     
     selected_sub = sub_accounts[sub_idx]
     sub_uid = selected_sub.get('userId', '')
+    sub_id = selected_sub.get('id', '')  # API 划转需要用 id 而不是 userId
     sub_name = selected_sub.get('name', sub_uid)
     assets_list = selected_sub.get('assetsList', [])
     
@@ -87,7 +88,7 @@ def do_bitget_subaccount_transfer(exchange: str):
         return
     
     print("\n正在划转...")
-    output = run_on_ec2(f"bitget_subaccount_transfer {sub_uid} from {coin} {amount}")
+    output = run_on_ec2(f"bitget_subaccount_transfer {sub_id} from {coin} {amount}")
     print(output)
 
 
