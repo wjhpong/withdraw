@@ -4,11 +4,12 @@
 from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name, input_amount
 
 
-def do_transfer():
+def do_transfer(exchange: str = None):
     """账户划转"""
-    exchange = select_exchange()
     if not exchange:
-        return
+        exchange = select_exchange()
+        if not exchange:
+            return
     
     exchange_base = get_exchange_base(exchange)
     display_name = get_exchange_display_name(exchange)

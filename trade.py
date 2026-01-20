@@ -4,11 +4,19 @@
 from utils import run_on_ec2, select_option, input_amount, select_exchange, get_exchange_display_name
 
 
-def do_stablecoin_trade():
+def do_stablecoin_trade(exchange: str = None):
     """稳定币交易"""
     print("\n=== 稳定币交易 ===")
 
-    # 选择交易对
+    # 如果已选择交易所，直接进入对应交易
+    if exchange:
+        if exchange.startswith("binance"):
+            trade_bfusd_usdt(exchange)
+        elif exchange == "bybit":
+            trade_usdc_usdt()
+        return
+
+    # 否则选择交易对
     pair_idx = select_option("选择交易对:", [
         "USDC/USDT (Bybit)",
         "BFUSD/USDT (Binance)",
@@ -78,12 +86,13 @@ def trade_usdc_usdt():
         input("\n按回车继续...")
 
 
-def trade_bfusd_usdt():
+def trade_bfusd_usdt(exchange: str = None):
     """Binance BFUSD/USDT 交易"""
     # 先选择账号
-    exchange = select_exchange(binance_only=True)
     if not exchange:
-        return
+        exchange = select_exchange(binance_only=True)
+        if not exchange:
+            return
 
     display_name = get_exchange_display_name(exchange)
     print(f"\n=== {display_name} BFUSD/USDT 交易 ===")

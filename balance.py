@@ -50,11 +50,12 @@ def filter_by_value(balances: dict, min_value: float = MIN_DISPLAY_VALUE) -> dic
     return result
 
 
-def show_balance():
+def show_balance(exchange: str = None):
     """查询余额"""
-    exchange = select_exchange()
     if not exchange:
-        return
+        exchange = select_exchange()
+        if not exchange:
+            return
 
     display_name = get_exchange_display_name(exchange)
     print(f"\n正在查询 {display_name} 余额...")
@@ -69,11 +70,12 @@ def show_balance():
             print(line)
 
 
-def show_pm_ratio():
+def show_pm_ratio(exchange: str = None):
     """查询统一保证金率"""
-    exchange = select_exchange(binance_only=True)
     if not exchange:
-        return
+        exchange = select_exchange(binance_only=True)
+        if not exchange:
+            return
 
     display_name = get_exchange_display_name(exchange)
     print(f"\n正在查询 {display_name} 统一保证金率...")

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """BNB 工具 - 抵扣开关、小额资产转换、市价买入"""
 
-from utils import run_on_ec2, select_option, select_exchange, input_amount
+from utils import run_on_ec2, select_option, select_exchange, input_amount, get_exchange_display_name
 
 
-def toggle_bnb_burn():
+def toggle_bnb_burn(exchange: str = None):
     """BNB 抵扣开关"""
-    exchange = select_exchange(binance_only=True)
     if not exchange:
-        return
+        exchange = select_exchange(binance_only=True)
+        if not exchange:
+            return
     
     print(f"\n正在查询 BNB 抵扣状态...")
     output = run_on_ec2(f"bnb_burn_status {exchange}")
@@ -38,11 +39,12 @@ def toggle_bnb_burn():
     print(output)
 
 
-def convert_dust_to_bnb():
+def convert_dust_to_bnb(exchange: str = None):
     """小额资产转换 BNB"""
-    exchange = select_exchange(binance_only=True)
     if not exchange:
-        return
+        exchange = select_exchange(binance_only=True)
+        if not exchange:
+            return
     
     print(f"\n正在查询可转换的小额资产...")
     output = run_on_ec2(f"dust_list {exchange}")
@@ -61,13 +63,13 @@ def convert_dust_to_bnb():
     print(output)
 
 
-def query_bnb_balance():
+def query_bnb_balance(exchange: str = None):
     """查询 BNB 持仓"""
-    exchange = select_exchange(binance_only=True)
     if not exchange:
-        return
+        exchange = select_exchange(binance_only=True)
+        if not exchange:
+            return
     
-    from utils import get_exchange_display_name
     display_name = get_exchange_display_name(exchange)
     
     print(f"\n正在查询 {display_name} BNB 持仓...")
@@ -112,11 +114,12 @@ def query_bnb_balance():
         print(f"  💵 总价值:       ${total_usd:.2f} (BNB≈${bnb_price:.2f})")
 
 
-def quick_buy_bnb_usdt():
+def quick_buy_bnb_usdt(exchange: str = None):
     """快捷小额 USDT 买 BNB"""
-    exchange = select_exchange(binance_only=True)
     if not exchange:
-        return
+        exchange = select_exchange(binance_only=True)
+        if not exchange:
+            return
     
     # 查询 USDT 余额和 BNB 价格
     print(f"\n正在查询...")
@@ -152,25 +155,30 @@ def quick_buy_bnb_usdt():
     print(output)
 
 
-def manage_bnb_tools():
+def manage_bnb_tools(exchange: str = None):
     """BNB 工具菜单"""
+    if not exchange:
+        exchange = select_exchange(binance_only=True)
+        if not exchange:
+            return
+    
     while True:
         action = select_option("BNB 工具:", [
             "BNB 抵扣开关",
             "小额资产转 BNB",
             "小额 USDT 买 BNB",
             "BNB 持仓查询",
-            "返回主菜单"
+            "返回"
         ])
         
         if action == 0:
-            toggle_bnb_burn()
+            toggle_bnb_burn(exchange)
         elif action == 1:
-            convert_dust_to_bnb()
+            convert_dust_to_bnb(exchange)
         elif action == 2:
-            quick_buy_bnb_usdt()
+            quick_buy_bnb_usdt(exchange)
         elif action == 3:
-            query_bnb_balance()
+            query_bnb_balance(exchange)
         else:
             break
         

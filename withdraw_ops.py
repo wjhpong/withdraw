@@ -7,14 +7,15 @@ from addresses import load_addresses
 from balance import get_coin_balance
 
 
-def do_withdraw():
+def do_withdraw(exchange: str = None):
     """执行提现"""
     addresses = load_addresses()
     
     # 选择交易所
-    exchange = select_exchange()
     if not exchange:
-        return
+        exchange = select_exchange()
+        if not exchange:
+            return
     
     exchange_base = get_exchange_base(exchange)
 
