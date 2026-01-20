@@ -5,6 +5,103 @@ import json
 from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name, input_amount
 
 
+def do_bitget_subaccount_transfer(exchange: str):
+    """Bitget 子账户 → 主账户划转"""
+    display_name = get_exchange_display_name(exchange)
+    
+    # 获取子账户列表
+    print("\n正在获取子账户列表...")
+    output = run_on_ec2("bitget_list_subaccounts")
+    
+    try:
+        sub_accounts = json.loads(output.strip())
+    except json.JSONDecodeError:
+        print(f"获取子账户列表失败: {output}")
+        return
+    
+    if not sub_accounts:
+        print("没有子账户或子账户无资产")
+        return
+    
+    # 显示子账户列表供选择
+    sub_names = []
+    for s in sub_accounts:
+        uid = s.get('userId', '')
+        # 计算该子账户总资产
+        assets = s.get('assetsList', [])
+        total = sum(float(a.get('available', 0)) for a in assets)
+        if total > 0:
+            sub_names.append(f"UID: {uid} (有 {len(assets)} 种资产)")
+        else:
+            sub_names.append(f"UID: {uid} (无资产)")
+    
+    sub_idx = select_option("选择子账户:", sub_names, allow_back=True)
+    
+    if sub_idx == -1:
+        return
+    
+    selected_sub = sub_accounts[sub_idx]
+    sub_uid = selected_sub.get('userId', '')
+    assets_list = selected_sub.get('assetsList', [])
+    
+    # 显示子账户资产
+    print(f"\n📤 从: 子账户 [{sub_uid}]")
+    print(f"📥 到: 主账户")
+    print("\n该子账户资产:")
+    print("-" * 40)
+    
+    for asset in assets_list:
+        coin = asset.get('coin', '')
+        available = float(asset.get('available', 0))
+        if available > 0:
+            print(f"  {coin}: {available}")
+    
+    if not assets_list:
+        print("  (无资产)")
+        return
+    
+    # 选择币种
+    coin_options = [f"{a.get('coin')} ({a.get('available')})" for a in assets_list if float(a.get('available', 0)) > 0]
+    if not coin_options:
+        print("\n子账户无可划转资产")
+        return
+    
+    coin_idx = select_option("选择要划转的币种:", coin_options, allow_back=True)
+    if coin_idx == -1:
+        return
+    
+    coin = assets_list[coin_idx].get('coin', '')
+    max_amount = float(assets_list[coin_idx].get('available', 0))
+    
+    # 输入数量
+    print(f"\n最大可划转: {max_amount} {coin}")
+    amount = input_amount(f"请输入划转数量 (最大 {max_amount}):")
+    if amount is None:
+        return
+    
+    if amount > max_amount:
+        print(f"数量超过最大可划转量 {max_amount}")
+        return
+    
+    # 确认
+    print("\n" + "=" * 50)
+    print("请确认划转信息:")
+    print(f"  交易所: {display_name}")
+    print(f"  从: 子账户 [{sub_uid}]")
+    print(f"  到: 主账户")
+    print(f"  币种: {coin}")
+    print(f"  数量: {amount}")
+    print("=" * 50)
+    
+    if select_option("确认划转?", ["确认", "取消"]) != 0:
+        print("已取消")
+        return
+    
+    print("\n正在划转...")
+    output = run_on_ec2(f"bitget_subaccount_transfer {sub_uid} from {coin} {amount}")
+    print(output)
+
+
 def do_gate_subaccount_transfer(exchange: str):
     """Gate.io 主账户 ↔ 子账户划转"""
     display_name = get_exchange_display_name(exchange)
@@ -123,6 +220,10 @@ def do_transfer(exchange: str = None):
     elif exchange_base == "gate":
         # Gate.io: 主账户 ↔ 子账户
         do_gate_subaccount_transfer(exchange)
+        return
+    elif exchange_base == "bitget":
+        # Bitget: 子账户 → 主账户
+        do_bitget_subaccount_transfer(exchange)
         return
     else:
         # Bybit: 统一账户 ↔ 资金账户
