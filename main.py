@@ -5,7 +5,7 @@
 """
 
 from utils import select_option, select_exchange, get_exchange_base, get_exchange_display_name
-from balance import show_balance, show_pm_ratio
+from balance import show_balance, show_pm_ratio, show_gate_subaccounts
 from withdraw_ops import do_withdraw
 from transfer import do_transfer
 from earn import manage_earn
@@ -53,6 +53,7 @@ def main():
             elif exchange_base == "gate":
                 options = [
                     ("查询余额", lambda ex=exchange: show_balance(ex)),
+                    ("子账户资产", lambda: show_gate_subaccounts()),
                     ("提现", lambda ex=exchange: do_withdraw(ex)),
                     ("账户划转", lambda ex=exchange: do_transfer(ex)),
                     ("管理地址簿", lambda ex=exchange: manage_addresses(ex)),

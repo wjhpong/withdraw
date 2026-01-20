@@ -84,6 +84,18 @@ def show_pm_ratio(exchange: str = None):
     print(output)
 
 
+def show_gate_subaccounts():
+    """查询 Gate.io 子账户资产"""
+    print("\n正在查询 Gate.io 子账户...")
+    output = run_on_ec2("gate_subaccounts")
+    
+    # 移除 EC2 返回的 "正在查询..." 行
+    lines = output.strip().split('\n')
+    for line in lines:
+        if '正在查询' not in line:
+            print(line)
+
+
 def get_coin_balance(exchange: str, coin: str, account_type: str = "SPOT") -> str:
     """查询指定币种余额
     
