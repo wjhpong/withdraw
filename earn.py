@@ -13,11 +13,27 @@ def show_spot_balances(exchange: str):
     print(f"\n正在查询现货余额...")
     output = run_on_ec2(f"balance {exchange}")
     
-    # 解析余额并按市值过滤
+    # 只解析现货账户部分（在"📦 现货账户余额"和下一个"=="之间）
     balances = []
+    in_spot_section = False
+    
     for line in output.strip().split('\n'):
-        if '正在查询' in line or not line.strip():
+        # 检测进入现货账户部分
+        if '现货账户余额' in line or 'SPOT' in line.upper() and '📦' in line:
+            in_spot_section = True
             continue
+        
+        # 检测离开现货账户部分（遇到下一个账户标题）
+        if in_spot_section and ('📊' in line or '💰' in line or '统一账户' in line or '理财持仓' in line):
+            break
+        
+        # 跳过标题行和分隔线
+        if not in_spot_section or '正在查询' in line or '===' in line or '---' in line or '币种' in line:
+            continue
+        
+        if not line.strip():
+            continue
+            
         parts = line.split()
         if len(parts) >= 2:
             try:
