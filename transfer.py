@@ -46,53 +46,40 @@ def do_bitget_subaccount_transfer(exchange: str):
     sub_name = selected_sub.get('name', sub_uid)
     assets_list = selected_sub.get('assetsList', [])
     
-    # 显示子账户资产
+    # 只查找 USDT 余额
+    usdt_balance = 0
+    for asset in assets_list:
+        if asset.get('coin', '').upper() == 'USDT':
+            usdt_balance = float(asset.get('available', 0))
+            break
+    
+    if usdt_balance <= 0:
+        print(f"\n子账户 [{sub_name}] 没有 USDT 可划转")
+        return
+    
+    # 显示划转信息
     print(f"\n📤 从: 子账户 [{sub_name}] (UID: {sub_uid})")
     print(f"📥 到: 主账户")
-    print("\n该子账户资产:")
-    print("-" * 40)
-    
-    for asset in assets_list:
-        coin = asset.get('coin', '')
-        available = float(asset.get('available', 0))
-        if available > 0:
-            print(f"  {coin}: {available}")
-    
-    if not assets_list:
-        print("  (无资产)")
-        return
-    
-    # 选择币种
-    coin_options = [f"{a.get('coin')} ({a.get('available')})" for a in assets_list if float(a.get('available', 0)) > 0]
-    if not coin_options:
-        print("\n子账户无可划转资产")
-        return
-    
-    coin_idx = select_option("选择要划转的币种:", coin_options, allow_back=True)
-    if coin_idx == -1:
-        return
-    
-    coin = assets_list[coin_idx].get('coin', '')
-    max_amount = float(assets_list[coin_idx].get('available', 0))
+    print(f"💰 USDT 可用: {usdt_balance}")
     
     # 输入数量
-    print(f"\n最大可划转: {max_amount} {coin}")
-    amount = input_amount(f"请输入划转数量 (最大 {max_amount}):")
+    amount = input_amount(f"请输入划转数量 (最大 {usdt_balance}):")
     if amount is None:
         return
     
-    if amount > max_amount:
-        print(f"数量超过最大可划转量 {max_amount}")
+    if amount > usdt_balance:
+        print(f"数量超过最大可划转量 {usdt_balance}")
         return
+    
+    coin = "USDT"
     
     # 确认
     print("\n" + "=" * 50)
     print("请确认划转信息:")
     print(f"  交易所: {display_name}")
-    print(f"  从: 子账户 [{sub_name}] (UID: {sub_uid})")
+    print(f"  从: 子账户 [{sub_name}]")
     print(f"  到: 主账户")
-    print(f"  币种: {coin}")
-    print(f"  数量: {amount}")
+    print(f"  数量: {amount} USDT")
     print("=" * 50)
     
     if select_option("确认划转?", ["确认", "取消"]) != 0:
