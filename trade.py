@@ -77,7 +77,7 @@ def trade_usdc_usdt():
             need_transfer = required_usdt - unified_balance + 1  # 多转1U作为缓冲
             if funding_balance >= need_transfer:
                 print(f"\n⚠️ 统一账户余额不足，自动从资金账户划转 {need_transfer:.2f} USDT...")
-                transfer_output = run_on_ec2(f"transfer bybit USDT FUND UNIFIED {need_transfer:.2f}")
+                transfer_output = run_on_ec2(f"transfer bybit FUND UNIFIED USDT {need_transfer:.2f}")
                 print(transfer_output)
                 # 更新余额
                 unified_balance += need_transfer
