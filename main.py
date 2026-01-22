@@ -65,6 +65,7 @@ def main():
                     ("查询余额", lambda ex=exchange: show_balance(ex)),
                     ("提现", lambda ex=exchange: do_withdraw(ex)),
                     ("账户划转", lambda ex=exchange: do_transfer(ex)),
+                    ("稳定币交易", lambda ex=exchange: do_stablecoin_trade(ex)),
                     ("管理地址簿", lambda ex=exchange: manage_addresses(ex)),
                     ("切换交易所", None),
                     ("退出", "exit"),
