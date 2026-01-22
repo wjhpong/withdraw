@@ -42,11 +42,23 @@ def trade_usdc_usdt():
         output = run_on_ec2("orderbook bybit")
         print(output)
 
-        # 显示 USDT 余额
-        print("正在查询统一账户 USDT 余额...")
-        output = run_on_ec2("account_balance bybit UNIFIED USDT")
-        balance = output.strip()
-        print(f"💰 统一账户 USDT 余额: {balance}")
+        # 显示资金账户和统一账户 USDT 余额
+        print("正在查询账户余额...")
+        funding_output = run_on_ec2("account_balance bybit FUND USDT")
+        unified_output = run_on_ec2("account_balance bybit UNIFIED USDT")
+        
+        try:
+            funding_balance = float(funding_output.strip())
+        except:
+            funding_balance = 0.0
+        try:
+            unified_balance = float(unified_output.strip())
+        except:
+            unified_balance = 0.0
+        
+        print(f"💰 资金账户 USDT: {funding_balance:.4f}")
+        print(f"💰 统一账户 USDT: {unified_balance:.4f}")
+        print(f"💰 合计 USDT: {funding_balance + unified_balance:.4f}")
 
         action = select_option("选择操作:", ["市价买入 USDC", "限价买入 USDC", "刷新深度", "返回"])
 
@@ -58,6 +70,26 @@ def trade_usdc_usdt():
         amount = input_amount("请输入买入 USDC 数量:")
         if amount is None:
             continue
+
+        # 检查统一账户余额是否足够，不够则自动划转
+        required_usdt = float(amount) * 1.001  # 预留0.1%滑点
+        if unified_balance < required_usdt:
+            need_transfer = required_usdt - unified_balance + 1  # 多转1U作为缓冲
+            if funding_balance >= need_transfer:
+                print(f"\n⚠️ 统一账户余额不足，需要从资金账户划转 {need_transfer:.2f} USDT")
+                if select_option("是否自动划转?", ["确认划转", "取消"]) == 0:
+                    print("正在划转...")
+                    transfer_output = run_on_ec2(f"transfer bybit USDT {need_transfer:.2f} FUND UNIFIED")
+                    print(transfer_output)
+                    # 更新余额
+                    unified_balance += need_transfer
+                    funding_balance -= need_transfer
+                else:
+                    continue
+            else:
+                total = funding_balance + unified_balance
+                print(f"\n❌ 余额不足! 需要约 {required_usdt:.2f} USDT，合计只有 {total:.2f} USDT")
+                continue
 
         if action == 0:  # 市价
             if select_option(f"确认市价买入 {amount} USDC?", ["确认", "取消"]) == 0:
