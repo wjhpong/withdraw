@@ -19,7 +19,7 @@ EXCHANGES = [
     ("binance", "BINANCE - Dennis"),
     ("binance2", "BINANCE - Vanie"),
     ("binance3", "BINANCE - 柏青"),
-    ("bybit", "BYBIT"),
+    ("bybit_lavas", "BYBIT - Lavas"),
     ("gate", "GATE.IO"),
     ("bitget", "BITGET"),
 ]
@@ -173,7 +173,7 @@ def select_exchange(allow_back: bool = True, binance_only: bool = False, bybit_o
     if binance_only:
         options = [(k, n) for k, n in EXCHANGES if k.startswith("binance")]
     elif bybit_only:
-        options = [(k, n) for k, n in EXCHANGES if k == "bybit"]
+        options = [(k, n) for k, n in EXCHANGES if k.startswith("bybit")]
     else:
         options = EXCHANGES
     
@@ -188,9 +188,11 @@ def select_exchange(allow_back: bool = True, binance_only: bool = False, bybit_o
 
 
 def get_exchange_base(exchange: str) -> str:
-    """获取交易所基础类型 (binance/binance2 都返回 binance)"""
+    """获取交易所基础类型 (binance/binance2 都返回 binance, bybit_lavas 返回 bybit)"""
     if exchange.startswith("binance"):
         return "binance"
+    if exchange.startswith("bybit"):
+        return "bybit"
     if exchange.startswith("gate"):
         return "gate"
     if exchange.startswith("bitget"):

@@ -7,7 +7,7 @@
     "api_key": "YOUR_SECOND_BINANCE_API_KEY",
     "api_secret": "YOUR_SECOND_BINANCE_API_SECRET"
   },
-  "bybit": {
+  "bybit_lavas": {
     "api_key": "YOUR_BYBIT_API_KEY",
     "api_secret": "YOUR_BYBIT_API_SECRET"
   },

@@ -12,8 +12,8 @@ def do_stablecoin_trade(exchange: str = None):
     if exchange:
         if exchange.startswith("binance"):
             trade_bfusd_usdt(exchange)
-        elif exchange == "bybit":
-            trade_usdc_usdt()
+        elif exchange.startswith("bybit"):
+            trade_usdc_usdt(exchange)
         return
 
     # 否则选择交易对
@@ -27,25 +27,28 @@ def do_stablecoin_trade(exchange: str = None):
         return
 
     if pair_idx == 0:
-        trade_usdc_usdt()
+        exchange = select_exchange(bybit_only=True)
+        if exchange:
+            trade_usdc_usdt(exchange)
     elif pair_idx == 1:
         trade_bfusd_usdt()
 
 
-def trade_usdc_usdt():
+def trade_usdc_usdt(exchange: str):
     """Bybit USDC/USDT 交易"""
-    print("\n=== Bybit USDC/USDT 交易 ===")
+    display_name = get_exchange_display_name(exchange)
+    print(f"\n=== {display_name} USDC/USDT 交易 ===")
 
     while True:
         # 显示深度
         print("\n正在获取 USDC/USDT 深度...")
-        output = run_on_ec2("orderbook bybit")
+        output = run_on_ec2(f"orderbook {exchange}")
         print(output)
 
         # 显示资金账户和统一账户 USDT 余额
         print("正在查询账户余额...")
-        funding_output = run_on_ec2("account_balance bybit FUND USDT")
-        unified_output = run_on_ec2("account_balance bybit UNIFIED USDT")
+        funding_output = run_on_ec2(f"account_balance {exchange} FUND USDT")
+        unified_output = run_on_ec2(f"account_balance {exchange} UNIFIED USDT")
         
         try:
             funding_balance = float(funding_output.strip())
@@ -77,7 +80,7 @@ def trade_usdc_usdt():
             need_transfer = required_usdt - unified_balance + 1  # 多转1U作为缓冲
             if funding_balance >= need_transfer:
                 print(f"\n⚠️ 统一账户余额不足，自动从资金账户划转 {need_transfer:.2f} USDT...")
-                transfer_output = run_on_ec2(f"transfer bybit FUND UNIFIED USDT {need_transfer:.2f}")
+                transfer_output = run_on_ec2(f"transfer {exchange} FUND UNIFIED USDT {need_transfer:.2f}")
                 print(transfer_output)
                 # 更新余额
                 unified_balance += need_transfer
@@ -90,7 +93,7 @@ def trade_usdc_usdt():
         if action == 0:  # 市价
             if select_option(f"确认市价买入 {amount} USDC?", ["确认", "取消"]) == 0:
                 print("\n正在下单...")
-                output = run_on_ec2(f"buy_usdc bybit market {amount}")
+                output = run_on_ec2(f"buy_usdc {exchange} market {amount}")
                 print(output)
 
         elif action == 1:  # 限价
@@ -108,7 +111,7 @@ def trade_usdc_usdt():
 
             if select_option(f"确认以 {price} 限价买入 {amount} USDC?", ["确认", "取消"]) == 0:
                 print("\n正在下单...")
-                output = run_on_ec2(f"buy_usdc bybit limit {amount} {price}")
+                output = run_on_ec2(f"buy_usdc {exchange} limit {amount} {price}")
                 print(output)
 
         input("\n按回车继续...")
