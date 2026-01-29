@@ -6,18 +6,39 @@ import os
 from utils import ADDRESSES_FILE, select_option, detect_address_type, EXCHANGES, get_exchange_base
 
 
+class AddressError(Exception):
+    """地址簿操作错误"""
+    pass
+
+
 def load_addresses() -> list:
     """加载地址簿"""
-    if os.path.exists(ADDRESSES_FILE):
+    if not os.path.exists(ADDRESSES_FILE):
+        return []
+
+    try:
         with open(ADDRESSES_FILE, "r", encoding="utf-8") as f:
-            return json.load(f).get("addresses", [])
-    return []
+            data = json.load(f)
+            if not isinstance(data, dict):
+                print(f"⚠️  地址簿格式错误，应为 JSON 对象")
+                return []
+            return data.get("addresses", [])
+    except json.JSONDecodeError as e:
+        print(f"❌ 地址簿 JSON 格式错误: {e}")
+        return []
+    except IOError as e:
+        print(f"❌ 读取地址簿失败: {e}")
+        return []
 
 
 def save_addresses(addresses: list):
     """保存地址簿"""
-    with open(ADDRESSES_FILE, "w", encoding="utf-8") as f:
-        json.dump({"addresses": addresses}, f, ensure_ascii=False, indent=2)
+    try:
+        with open(ADDRESSES_FILE, "w", encoding="utf-8") as f:
+            json.dump({"addresses": addresses}, f, ensure_ascii=False, indent=2)
+    except IOError as e:
+        print(f"❌ 保存地址簿失败: {e}")
+        raise AddressError(f"保存失败: {e}")
 
 
 def manage_addresses(exchange: str = None):
@@ -74,33 +95,44 @@ def _add_address(addresses: list, default_exchange: str = None):
     # 选择交易所
     print("\n选择地址绑定的交易所:")
     exchange_bases = list(set(get_exchange_base(k) for k, _ in EXCHANGES))
-    exchange_names = {"binance": "Binance", "bybit": "Bybit", "gate": "Gate.io"}
+    exchange_names = {"binance": "Binance", "bybit": "Bybit", "gate": "Gate.io", "bitget": "Bitget"}
     exchange_options = [exchange_names.get(e, e) for e in exchange_bases]
-    
+
     if default_exchange and default_exchange in exchange_bases:
         default_idx = exchange_bases.index(default_exchange)
         print(f"(当前交易所: {exchange_options[default_idx]})")
-    
+
     ex_idx = select_option("选择交易所:", exchange_options, allow_back=True)
     if ex_idx == -1:
         return
     selected_exchange = exchange_bases[ex_idx]
-    
+
     name = input("\n请输入地址备注名 (如 'jiaojiao'): ").strip()
     if not name:
         print("已取消")
         return
-    
+
+    # 检查名称是否已存在
+    for addr in addresses:
+        if addr.get('name', '').lower() == name.lower() and addr.get('exchange') == selected_exchange:
+            print(f"❌ 该交易所已存在同名地址 [{name}]")
+            return
+
     address = input("请输入地址: ").strip()
     if not address:
         print("已取消")
         return
-    
+
+    # 基本地址格式验证
+    if len(address) < 20:
+        print(f"❌ 地址太短，请检查")
+        return
+
     # 自动检测地址类型
     addr_type = detect_address_type(address)
     type_names = {
-        "evm": "EVM (以太坊/BSC/ARB等)", 
-        "trc": "TRC (波场)", 
+        "evm": "EVM (以太坊/BSC/ARB等)",
+        "trc": "TRC (波场)",
         "sol": "SOL (Solana)",
         "sui": "SUI",
         "apt": "APT (Aptos)",
@@ -108,10 +140,10 @@ def _add_address(addresses: list, default_exchange: str = None):
         "other": "其他"
     }
     print(f"\n检测到地址类型: {type_names.get(addr_type, addr_type)}")
-    
+
     type_options = ["EVM (0x短地址)", "TRC (T地址)", "SOL (Solana)", "SUI", "APT (Aptos)", "其他"]
     type_map = ["evm", "trc", "sol", "sui", "apt", "other"]
-    
+
     if addr_type == "sui_apt":
         print("SUI 和 APT 地址格式相同，请选择:")
         confirm_type = select_option("选择地址类型:", ["SUI", "APT (Aptos)"])
@@ -119,9 +151,9 @@ def _add_address(addresses: list, default_exchange: str = None):
     else:
         confirm_type = select_option("确认地址类型:", type_options)
         addr_type = type_map[confirm_type]
-    
+
     memo = input("请输入 Memo/Tag (没有直接回车跳过): ").strip() or None
-    
+
     addresses.append({
         "name": name,
         "address": address,
@@ -129,8 +161,14 @@ def _add_address(addresses: list, default_exchange: str = None):
         "memo": memo,
         "exchange": selected_exchange
     })
-    save_addresses(addresses)
-    print(f"\n✅ 地址 [{name}] 已保存到 {exchange_names.get(selected_exchange, selected_exchange)}!")
+
+    try:
+        save_addresses(addresses)
+        print(f"\n✅ 地址 [{name}] 已保存到 {exchange_names.get(selected_exchange, selected_exchange)}!")
+    except AddressError:
+        # 回滚添加
+        addresses.pop()
+        print("   地址未添加")
 
 
 def _delete_address(addresses: list, filtered: list):
@@ -138,19 +176,24 @@ def _delete_address(addresses: list, filtered: list):
     if not filtered:
         print("\n没有可删除的地址")
         return
-    
+
     addr_options = [f"[{a['name']}] {a['address'][:25]}..." for a in filtered]
     addr_options.append("取消")
     del_idx = select_option("选择要删除的地址:", addr_options)
-    
+
     if del_idx < len(filtered):
         # 找到在原始列表中的索引
         to_delete = filtered[del_idx]
         for i, a in enumerate(addresses):
             if a['name'] == to_delete['name'] and a['address'] == to_delete['address']:
                 deleted = addresses.pop(i)
-                save_addresses(addresses)
-                print(f"\n✅ 地址 [{deleted['name']}] 已删除!")
+                try:
+                    save_addresses(addresses)
+                    print(f"\n✅ 地址 [{deleted['name']}] 已删除!")
+                except AddressError:
+                    # 回滚删除
+                    addresses.insert(i, deleted)
+                    print("   地址未删除")
                 break
 
 

@@ -2,9 +2,14 @@
 """提现操作"""
 
 import time
-from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name, input_amount, get_networks_for_type, get_networks_for_coin, detect_address_type
+from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name, input_amount, get_networks_for_type, get_networks_for_coin, detect_address_type, SSHError
 from addresses import load_addresses
 from balance import get_coin_balance
+
+
+class WithdrawError(Exception):
+    """提现操作错误"""
+    pass
 
 
 def do_withdraw(exchange: str = None):
@@ -194,50 +199,63 @@ def do_withdraw(exchange: str = None):
         return
     
     # 自动从统一账户划转到现货/资金账户（如果需要）
-    required_amount = float(amount) + 2  # 预留手续费
-    
-    if exchange_base == "bybit":
-        # Bybit: 查询资金账户余额
-        fund_balance = float(get_coin_balance(exchange, coin, "FUND") or 0)
-        
-        # 如果资金账户余额不足，从统一账户划转
-        if fund_balance < required_amount:
-            unified_balance = float(get_coin_balance(exchange, coin, "UNIFIED") or 0)
-            
-            if unified_balance > 0:
-                transfer_amount = required_amount - fund_balance
-                if transfer_amount > unified_balance:
-                    transfer_amount = unified_balance
-                
-                print(f"\n⚠️  资金账户余额不足 ({fund_balance} {coin})，需要约 {required_amount} {coin}（含手续费）")
-                print(f"   统一账户余额: {unified_balance} {coin}")
-                print(f"   正在从统一账户划转 {transfer_amount} {coin} 到资金账户...")
-                
-                transfer_result = run_on_ec2(f"transfer bybit UNIFIED FUND {coin} {transfer_amount}")
-                print(transfer_result)
-                time.sleep(1)
-    
-    elif exchange_base == "binance":
-        # Binance: 查询现货账户余额
-        spot_balance = float(get_coin_balance(exchange, coin, "SPOT") or 0)
-        
-        # 如果现货账户余额不足，从统一账户(Portfolio Margin)划转
-        if spot_balance < required_amount:
-            pm_balance = float(get_coin_balance(exchange, coin, "PM") or 0)
-            
-            if pm_balance > 0:
-                transfer_amount = required_amount - spot_balance
-                if transfer_amount > pm_balance:
-                    transfer_amount = pm_balance
-                
-                print(f"\n⚠️  现货账户余额不足 ({spot_balance} {coin})，需要约 {required_amount} {coin}（含手续费）")
-                print(f"   统一账户余额: {pm_balance} {coin}")
-                print(f"   正在从统一账户划转 {transfer_amount} {coin} 到现货账户...")
-                
-                # Binance 使用 PORTFOLIO_MARGIN 和 MAIN 作为类型名
-                transfer_result = run_on_ec2(f"transfer {exchange} PORTFOLIO_MARGIN MAIN {coin} {transfer_amount}")
-                print(transfer_result)
-                time.sleep(1)
+    try:
+        required_amount = float(amount) + 2  # 预留手续费
+    except (ValueError, TypeError):
+        print(f"❌ 无效的数量: {amount}")
+        return
+
+    try:
+        if exchange_base == "bybit":
+            # Bybit: 查询资金账户余额
+            fund_balance = float(get_coin_balance(exchange, coin, "FUND") or 0)
+
+            # 如果资金账户余额不足，从统一账户划转
+            if fund_balance < required_amount:
+                unified_balance = float(get_coin_balance(exchange, coin, "UNIFIED") or 0)
+
+                if unified_balance > 0:
+                    transfer_amount = required_amount - fund_balance
+                    if transfer_amount > unified_balance:
+                        transfer_amount = unified_balance
+
+                    print(f"\n⚠️  资金账户余额不足 ({fund_balance} {coin})，需要约 {required_amount} {coin}（含手续费）")
+                    print(f"   统一账户余额: {unified_balance} {coin}")
+                    print(f"   正在从统一账户划转 {transfer_amount} {coin} 到资金账户...")
+
+                    transfer_result = run_on_ec2(f"transfer bybit UNIFIED FUND {coin} {transfer_amount}")
+                    print(transfer_result)
+                    time.sleep(1)
+
+        elif exchange_base == "binance":
+            # Binance: 查询现货账户余额
+            spot_balance = float(get_coin_balance(exchange, coin, "SPOT") or 0)
+
+            # 如果现货账户余额不足，从统一账户(Portfolio Margin)划转
+            if spot_balance < required_amount:
+                pm_balance = float(get_coin_balance(exchange, coin, "PM") or 0)
+
+                if pm_balance > 0:
+                    transfer_amount = required_amount - spot_balance
+                    if transfer_amount > pm_balance:
+                        transfer_amount = pm_balance
+
+                    print(f"\n⚠️  现货账户余额不足 ({spot_balance} {coin})，需要约 {required_amount} {coin}（含手续费）")
+                    print(f"   统一账户余额: {pm_balance} {coin}")
+                    print(f"   正在从统一账户划转 {transfer_amount} {coin} 到现货账户...")
+
+                    # Binance 使用 PORTFOLIO_MARGIN 和 MAIN 作为类型名
+                    transfer_result = run_on_ec2(f"transfer {exchange} PORTFOLIO_MARGIN MAIN {coin} {transfer_amount}")
+                    print(transfer_result)
+                    time.sleep(1)
+
+    except SSHError as e:
+        print(f"❌ 自动划转失败: {e}")
+        print("   请手动划转后重试")
+        return
+    except ValueError as e:
+        print(f"❌ 余额解析错误: {e}")
+        return
 
     # 确认
     display_name = get_exchange_display_name(exchange)
@@ -264,6 +282,16 @@ def do_withdraw(exchange: str = None):
     cmd = f'withdraw {exchange} {coin} {network} {address} {amount}'
     if memo:
         cmd += f' {memo}'
-    
-    output = run_on_ec2(cmd)
-    print(output)
+
+    try:
+        output = run_on_ec2(cmd)
+        print(output)
+
+        # 检查常见错误
+        output_lower = output.lower()
+        if "error" in output_lower or "failed" in output_lower or "失败" in output:
+            print("\n⚠️  提现可能失败，请检查交易所确认")
+        elif "success" in output_lower or "成功" in output:
+            print("\n✅ 提现请求已提交")
+    except SSHError as e:
+        print(f"\n❌ 提现请求失败: {e}")

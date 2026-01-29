@@ -2,21 +2,31 @@
 """账户划转"""
 
 import json
-from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name, input_amount
+from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name, input_amount, SSHError
+
+
+class TransferError(Exception):
+    """划转操作错误"""
+    pass
 
 
 def do_bitget_subaccount_transfer(exchange: str):
     """Bitget 子账户 → 主账户划转"""
     display_name = get_exchange_display_name(exchange)
-    
+
     # 获取子账户列表
     print("\n正在获取子账户列表...")
-    output = run_on_ec2("bitget_list_subaccounts")
-    
+    try:
+        output = run_on_ec2("bitget_list_subaccounts")
+    except SSHError as e:
+        print(f"❌ 获取子账户列表失败: {e}")
+        return
+
     try:
         sub_accounts = json.loads(output.strip())
-    except json.JSONDecodeError:
-        print(f"获取子账户列表失败: {output}")
+    except json.JSONDecodeError as e:
+        print(f"❌ 解析子账户列表失败: {e}")
+        print(f"   原始输出: {output[:200]}...")
         return
     
     if not sub_accounts:
@@ -87,34 +97,46 @@ def do_bitget_subaccount_transfer(exchange: str):
         return
     
     print("\n正在划转...")
-    output = run_on_ec2(f"bitget_subaccount_transfer {sub_uid} from {coin} {amount}")
-    print(output)
+    try:
+        output = run_on_ec2(f"bitget_subaccount_transfer {sub_uid} from {coin} {amount}")
+        print(output)
+        if "error" in output.lower() or "失败" in output:
+            print("\n⚠️  划转可能失败，请检查交易所确认")
+        elif "success" in output.lower() or "成功" in output:
+            print("\n✅ 划转成功")
+    except SSHError as e:
+        print(f"❌ 划转失败: {e}")
 
 
 def do_gate_subaccount_transfer(exchange: str):
     """Gate.io 主账户 ↔ 子账户划转"""
     display_name = get_exchange_display_name(exchange)
-    
+
     # 选择划转方向
     direction_idx = select_option("选择划转方向:", [
         "主账户 → 子账户",
         "子账户 → 主账户"
     ], allow_back=True)
-    
+
     if direction_idx == -1:
         return
-    
+
     direction = "to" if direction_idx == 0 else "from"
-    
+
     # 获取子账户列表
     print("\n正在获取子账户列表...")
-    output = run_on_ec2("gate_list_subaccounts")
-    
+    try:
+        output = run_on_ec2("gate_list_subaccounts")
+    except SSHError as e:
+        print(f"❌ 获取子账户列表失败: {e}")
+        return
+
     try:
         # 解析 JSON 格式的子账户列表
         sub_accounts = json.loads(output.strip())
-    except json.JSONDecodeError:
-        print(f"获取子账户列表失败: {output}")
+    except json.JSONDecodeError as e:
+        print(f"❌ 解析子账户列表失败: {e}")
+        print(f"   原始输出: {output[:200]}...")
         return
     
     if not sub_accounts:
@@ -180,8 +202,15 @@ def do_gate_subaccount_transfer(exchange: str):
         return
     
     print("\n正在划转...")
-    output = run_on_ec2(f"gate_subaccount_transfer {sub_uid} {direction} {coin} {amount}")
-    print(output)
+    try:
+        output = run_on_ec2(f"gate_subaccount_transfer {sub_uid} {direction} {coin} {amount}")
+        print(output)
+        if "error" in output.lower() or "失败" in output:
+            print("\n⚠️  划转可能失败，请检查交易所确认")
+        elif "success" in output.lower() or "成功" in output:
+            print("\n✅ 划转成功")
+    except SSHError as e:
+        print(f"❌ 划转失败: {e}")
 
 
 def do_transfer(exchange: str = None):
@@ -260,5 +289,12 @@ def do_transfer(exchange: str = None):
         return
     
     print("\n正在划转...")
-    output = run_on_ec2(f"transfer {exchange} {from_type} {to_type} {coin} {amount}")
-    print(output)
+    try:
+        output = run_on_ec2(f"transfer {exchange} {from_type} {to_type} {coin} {amount}")
+        print(output)
+        if "error" in output.lower() or "失败" in output:
+            print("\n⚠️  划转可能失败，请检查交易所确认")
+        elif "success" in output.lower() or "成功" in output:
+            print("\n✅ 划转成功")
+    except SSHError as e:
+        print(f"❌ 划转失败: {e}")
