@@ -20,6 +20,10 @@
     "api_secret": "YOUR_BITGET_API_SECRET",
     "passphrase": "YOUR_BITGET_PASSPHRASE"
   },
+  "hyperliquid": {
+    "wallet_address": "0x...",
+    "private_key": "0x..."
+  },
   "ssh": {
     "host": "tixian",
     "user": null,

@@ -243,6 +243,11 @@ def do_transfer(exchange: str = None):
         # Bitget: 子账户 → 主账户
         do_bitget_subaccount_transfer(exchange)
         return
+    elif exchange_base == "aster":
+        # Aster: 现货 ↔ 合约 (使用 aster.py)
+        from aster import do_aster_transfer
+        do_aster_transfer(exchange)
+        return
     else:
         # Bybit: 统一账户 ↔ 资金账户
         transfer_options = [

@@ -71,6 +71,20 @@ def show_earn_position(exchange: str):
         print(f"❌ 查询理财持仓失败: {e}")
 
 
+def show_earn_quota(exchange: str):
+    """查询可申购额度"""
+    coin = input("\n请输入币种 (如 USDT, 输入 0 返回): ").strip().upper()
+    if not coin or coin == "0":
+        return
+
+    print(f"\n正在查询 {coin} 活期理财可申购额度...")
+    try:
+        output = run_on_ec2(f"earn quota {exchange} {coin}")
+        print(output)
+    except SSHError as e:
+        print(f"❌ 查询失败: {e}")
+
+
 def do_earn_subscribe(exchange: str):
     """申购理财"""
     coin = input("\n请输入币种 (如 USDT, 输入 0 返回): ").strip().upper()
@@ -174,13 +188,15 @@ def manage_earn(exchange: str = None):
     show_spot_balances(exchange)
 
     while True:
-        action = select_option(f"币安理财 [{display_name}]:", ["查询持仓", "申购活期", "赎回活期", "返回"])
-        
+        action = select_option(f"币安理财 [{display_name}]:", ["查询持仓", "可申购额度", "申购活期", "赎回活期", "返回"])
+
         if action == 0:
             show_earn_position(exchange)
         elif action == 1:
-            do_earn_subscribe(exchange)
+            show_earn_quota(exchange)
         elif action == 2:
+            do_earn_subscribe(exchange)
+        elif action == 3:
             do_earn_redeem(exchange)
         else:
             break

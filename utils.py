@@ -82,7 +82,8 @@ def get_ec2_exchange_key(user_id: str, account_id: str) -> str:
 
     # 找到匹配交易所类型的 legacy key
     for key in user_legacy_keys:
-        if key == exchange_type or key.startswith(exchange_type):
+        # 匹配: key == exchange_type, key 以 exchange_type 开头, 或 key 包含 _exchange_type
+        if key == exchange_type or key.startswith(exchange_type) or f"_{exchange_type}" in key:
             return key
 
     # 如果没找到，返回交易所类型作为默认值
@@ -253,6 +254,8 @@ def get_exchange_base(exchange: str) -> str:
         return "bitget"
     if exchange.startswith("hyperliquid"):
         return "hyperliquid"
+    if exchange.startswith("lighter"):
+        return "lighter"
     if exchange.startswith("aster"):
         return "aster"
     if exchange.startswith("bybit"):

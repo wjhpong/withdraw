@@ -9,6 +9,9 @@ from utils import (
     get_exchange_base, get_user_accounts, load_config
 )
 from balance import show_balance, show_pm_ratio, show_gate_subaccounts
+from aster import show_aster_margin_ratio
+from hyperliquid_ops import show_hyperliquid_balance, show_hyperliquid_margin_ratio, do_hyperliquid_transfer
+from lighter_ops import show_lighter_balance, show_lighter_margin_ratio
 from withdraw_ops import do_withdraw
 from transfer import do_transfer
 from earn import manage_earn
@@ -55,33 +58,52 @@ def main():
             # 根据交易所类型构建菜单
             options = []
 
-            # 所有交易所都支持的功能
-            options.append(("查询余额", lambda ex=ec2_exchange: show_balance(ex)))
-            options.append(("提现", lambda ex=ec2_exchange: do_withdraw(ex)))
-            options.append(("账户划转", lambda ex=ec2_exchange: do_transfer(ex)))
+            # Hyperliquid 和 Lighter 使用本地函数，其他交易所通过 EC2
+            if exchange_base == "hyperliquid":
+                options.append(("查询余额", lambda: show_hyperliquid_balance()))
+                options.append(("账户划转", lambda: do_hyperliquid_transfer("hyperliquid")))
+                options.append(("保证金率", lambda: show_hyperliquid_margin_ratio()))
+            elif exchange_base == "lighter":
+                options.append(("查询余额", lambda: show_lighter_balance()))
+                options.append(("保证金率", lambda: show_lighter_margin_ratio()))
+            else:
+                # 所有其他交易所都支持查询余额
+                options.append(("查询余额", lambda ex=ec2_exchange: show_balance(ex)))
 
-            # 交易功能 (撤单、市价卖出)
-            options.append(("撤单", lambda ex=ec2_exchange: cancel_orders_menu(ex)))
-            options.append(("市价卖出", lambda ex=ec2_exchange: market_sell_menu(ex)))
+                # Aster 不支持提现
+                if exchange_base != "aster":
+                    options.append(("提现", lambda ex=ec2_exchange: do_withdraw(ex)))
 
-            # Binance 特有功能
-            if exchange_base == "binance":
-                options.append(("永续平仓", lambda ex=ec2_exchange: futures_close_menu(ex)))
-                options.append(("理财管理", lambda ex=ec2_exchange: manage_earn(ex)))
-                options.append(("稳定币交易", lambda ex=ec2_exchange: do_stablecoin_trade(ex)))
-                options.append(("BNB工具", lambda ex=ec2_exchange: manage_bnb_tools(ex)))
-                options.append(("统一保证金率", lambda ex=ec2_exchange: show_pm_ratio(ex)))
+                # 账户划转
+                options.append(("账户划转", lambda ex=ec2_exchange: do_transfer(ex)))
 
-            # Gate 特有功能
-            if exchange_base == "gate":
-                options.append(("子账户资产", lambda: show_gate_subaccounts()))
+                # 交易功能 (撤单、市价卖出)
+                options.append(("撤单", lambda ex=ec2_exchange: cancel_orders_menu(ex)))
+                options.append(("市价卖出", lambda ex=ec2_exchange: market_sell_menu(ex)))
 
-            # Bybit 特有功能
-            if exchange_base == "bybit":
-                options.append(("资金费率", lambda: show_funding_rate("bybit")))
+                # Binance 特有功能
+                if exchange_base == "binance":
+                    options.append(("永续平仓", lambda ex=ec2_exchange: futures_close_menu(ex)))
+                    options.append(("理财管理", lambda ex=ec2_exchange: manage_earn(ex)))
+                    options.append(("稳定币交易", lambda ex=ec2_exchange: do_stablecoin_trade(ex)))
+                    options.append(("BNB工具", lambda ex=ec2_exchange: manage_bnb_tools(ex)))
+                    options.append(("统一保证金率", lambda ex=ec2_exchange: show_pm_ratio(ex)))
 
-            # 地址管理
-            options.append(("管理地址簿", lambda ex=ec2_exchange: manage_addresses(ex)))
+                # Gate 特有功能
+                if exchange_base == "gate":
+                    options.append(("子账户资产", lambda: show_gate_subaccounts()))
+
+                # Bybit 特有功能
+                if exchange_base == "bybit":
+                    options.append(("资金费率", lambda: show_funding_rate("bybit")))
+
+                # Aster 特有功能
+                if exchange_base == "aster":
+                    options.append(("统一保证金率", lambda ex=ec2_exchange: show_aster_margin_ratio(ex)))
+
+                # 地址管理 (Aster 不需要)
+                if exchange_base != "aster":
+                    options.append(("管理地址簿", lambda ex=ec2_exchange: manage_addresses(ex)))
 
             # 导航选项
             options.append(("切换用户/交易所", None))
