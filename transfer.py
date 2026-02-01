@@ -11,13 +11,24 @@ class TransferError(Exception):
 
 
 def do_bitget_subaccount_transfer(exchange: str):
-    """Bitget 子账户 → 主账户划转"""
+    """Bitget 主账户 ↔ 子账户划转"""
     display_name = get_exchange_display_name(exchange)
+
+    # 选择划转方向
+    direction_idx = select_option("选择划转方向:", [
+        "主账户 → 子账户",
+        "子账户 → 主账户"
+    ], allow_back=True)
+
+    if direction_idx == -1:
+        return
+
+    direction = "to" if direction_idx == 0 else "from"
 
     # 获取子账户列表
     print("\n正在获取子账户列表...")
     try:
-        output = run_on_ec2("bitget_list_subaccounts")
+        output = run_on_ec2(f"bitget_list_subaccounts {exchange}")
     except SSHError as e:
         print(f"❌ 获取子账户列表失败: {e}")
         return
@@ -28,77 +39,91 @@ def do_bitget_subaccount_transfer(exchange: str):
         print(f"❌ 解析子账户列表失败: {e}")
         print(f"   原始输出: {output[:200]}...")
         return
-    
+
     if not sub_accounts:
-        print("没有子账户或子账户无资产")
+        print("没有子账户")
         return
-    
+
     # 显示子账户列表供选择
     sub_names = []
     for s in sub_accounts:
         uid = s.get('userId', '')
-        name = s.get('name', uid)  # 使用名称，没有则显示 UID
-        # 计算该子账户总资产
+        name = s.get('name', uid)
         assets = s.get('assetsList', [])
-        total = sum(float(a.get('available', 0)) for a in assets)
-        if total > 0:
-            sub_names.append(f"[{name}] UID: {uid} (有 {len(assets)} 种资产)")
-        else:
-            sub_names.append(f"[{name}] UID: {uid} (无资产)")
-    
+        # 计算 USDT 余额
+        usdt_bal = 0
+        for a in assets:
+            if a.get('coin', '').upper() == 'USDT':
+                usdt_bal = float(a.get('available', 0))
+                break
+        sub_names.append(f"{name} (USDT: {usdt_bal:,.2f})")
+
     sub_idx = select_option("选择子账户:", sub_names, allow_back=True)
-    
+
     if sub_idx == -1:
         return
-    
+
     selected_sub = sub_accounts[sub_idx]
-    sub_uid = selected_sub.get('userId', '')  # API 划转需要用 userId
+    sub_uid = selected_sub.get('userId', '')
     sub_name = selected_sub.get('name', sub_uid)
     assets_list = selected_sub.get('assetsList', [])
-    
-    # 只查找 USDT 余额
-    usdt_balance = 0
-    for asset in assets_list:
-        if asset.get('coin', '').upper() == 'USDT':
-            usdt_balance = float(asset.get('available', 0))
-            break
-    
-    if usdt_balance <= 0:
-        print(f"\n子账户 [{sub_name}] 没有 USDT 可划转")
+
+    # 显示方向信息
+    if direction == "to":
+        print(f"\n📤 从: 主账户")
+        print(f"📥 到: 子账户 [{sub_name}]")
+        # 显示主账户余额
+        print(f"\n正在查询主账户余额...")
+        try:
+            bal_output = run_on_ec2(f"balance {exchange}")
+            print(bal_output)
+        except SSHError as e:
+            print(f"查询余额失败: {e}")
+    else:
+        print(f"\n📤 从: 子账户 [{sub_name}]")
+        print(f"📥 到: 主账户")
+        # 显示该子账户余额
+        print(f"\n子账户 [{sub_name}] 资产:")
+        for asset in assets_list:
+            coin_name = asset.get('coin', '')
+            available = float(asset.get('available', 0))
+            if available > 0:
+                print(f"  {coin_name}: {available}")
+
+    # 输入币种
+    coin = input("\n请输入要划转的币种 (如 USDT, 输入 0 返回): ").strip().upper()
+    if not coin or coin == "0":
         return
-    
-    # 显示划转信息
-    print(f"\n📤 从: 子账户 [{sub_name}] (UID: {sub_uid})")
-    print(f"📥 到: 主账户")
-    print(f"💰 USDT 可用: {usdt_balance}")
-    
+
     # 输入数量
-    amount = input_amount(f"请输入划转数量 (最大 {usdt_balance}):")
+    amount = input_amount("请输入划转数量:")
     if amount is None:
         return
-    
-    if amount > usdt_balance:
-        print(f"数量超过最大可划转量 {usdt_balance}")
-        return
-    
-    coin = "USDT"
-    
+
     # 确认
+    if direction == "to":
+        from_str = "主账户"
+        to_str = f"子账户 [{sub_name}]"
+    else:
+        from_str = f"子账户 [{sub_name}]"
+        to_str = "主账户"
+
     print("\n" + "=" * 50)
     print("请确认划转信息:")
     print(f"  交易所: {display_name}")
-    print(f"  从: 子账户 [{sub_name}]")
-    print(f"  到: 主账户")
-    print(f"  数量: {amount} USDT")
+    print(f"  从: {from_str}")
+    print(f"  到: {to_str}")
+    print(f"  币种: {coin}")
+    print(f"  数量: {amount}")
     print("=" * 50)
-    
+
     if select_option("确认划转?", ["确认", "取消"]) != 0:
         print("已取消")
         return
-    
+
     print("\n正在划转...")
     try:
-        output = run_on_ec2(f"bitget_subaccount_transfer {sub_uid} from {coin} {amount}")
+        output = run_on_ec2(f"bitget_subaccount_transfer {exchange} {sub_uid} {direction} {coin} {amount}")
         print(output)
         if "error" in output.lower() or "失败" in output:
             print("\n⚠️  划转可能失败，请检查交易所确认")
@@ -263,11 +288,23 @@ def do_transfer(exchange: str = None):
     
     print(f"\n📤 从: {from_type}")
     print(f"📥 到: {to_type}")
-    
+
     # 显示源账户余额
     print(f"\n正在查询 {from_type} 账户余额...")
     output = run_on_ec2(f"balance {exchange}")
     print(output)
+
+    # Binance PM 划转时显示最大可划转金额
+    if exchange_base == "binance" and from_type == "PORTFOLIO_MARGIN":
+        try:
+            pm_output = run_on_ec2(f"pm_max_withdraw {exchange}")
+            pm_data = json.loads(pm_output.strip())
+            if "totalAvailableBalance" in pm_data:
+                max_withdraw = float(pm_data["totalAvailableBalance"])
+                print(f"\n💡 统一账户最大可划转金额: ${max_withdraw:,.2f}")
+                print("   (受持仓保证金和维持保证金限制)")
+        except:
+            pass
     
     # 输入币种
     coin = input("\n请输入要划转的币种 (如 USDT, 输入 0 返回): ").strip().upper()

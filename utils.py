@@ -246,19 +246,19 @@ def select_user_and_account(allow_back: bool = True):
 
 def get_exchange_base(exchange: str) -> str:
     """获取交易所基础类型 (binance/binance2 都返回 binance)"""
-    if exchange.startswith("binance"):
+    if exchange.startswith("binance") or "_binance" in exchange:
         return "binance"
-    if exchange.startswith("gate"):
+    if exchange.startswith("gate") or "_gate" in exchange:
         return "gate"
-    if exchange.startswith("bitget"):
+    if exchange.startswith("bitget") or "_bitget" in exchange:
         return "bitget"
-    if exchange.startswith("hyperliquid"):
+    if exchange.startswith("hyperliquid") or "_hyperliquid" in exchange:
         return "hyperliquid"
-    if exchange.startswith("lighter"):
+    if exchange.startswith("lighter") or "_lighter" in exchange:
         return "lighter"
-    if exchange.startswith("aster"):
+    if exchange.startswith("aster") or "_aster" in exchange:
         return "aster"
-    if exchange.startswith("bybit"):
+    if exchange.startswith("bybit") or "_bybit" in exchange:
         return "bybit"
     return exchange
 

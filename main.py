@@ -70,12 +70,13 @@ def main():
                 # 所有其他交易所都支持查询余额
                 options.append(("查询余额", lambda ex=ec2_exchange: show_balance(ex)))
 
-                # Aster 不支持提现
-                if exchange_base != "aster":
+                # Aster 和 Gate 不支持提现
+                if exchange_base not in ("aster", "gate"):
                     options.append(("提现", lambda ex=ec2_exchange: do_withdraw(ex)))
 
-                # 账户划转
-                options.append(("账户划转", lambda ex=ec2_exchange: do_transfer(ex)))
+                # 账户划转 (Gate 不支持)
+                if exchange_base != "gate":
+                    options.append(("账户划转", lambda ex=ec2_exchange: do_transfer(ex)))
 
                 # 交易功能 (撤单、市价卖出)
                 options.append(("撤单", lambda ex=ec2_exchange: cancel_orders_menu(ex)))

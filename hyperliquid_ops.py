@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Hyperliquid 交易所专用功能 - 本地直接运行"""
 
+from eth_account import Account
 from hyperliquid.info import Info
 from hyperliquid.exchange import Exchange
 from hyperliquid.utils import constants
@@ -238,10 +239,12 @@ def do_hyperliquid_transfer(exchange: str):
             print("已取消")
             return
 
-        # 执行划转
-        exchange_client = Exchange(None, wallet_address, private_key, constants.MAINNET_API_URL)
+        # 执行划转 (使用 API Wallet 模式，wallet_address 是主账户，私钥是 API Wallet 的)
+        wallet = Account.from_key(private_key)
+        exchange_client = Exchange(wallet, constants.MAINNET_API_URL, account_address=wallet_address)
 
-        result = exchange_client.spot_transfer(amount, not is_spot_to_perp)
+        # usd_class_transfer: to_perp=True 划转到合约, to_perp=False 划转到现货
+        result = exchange_client.usd_class_transfer(amount, is_spot_to_perp)
 
         if result.get("status") == "ok":
             print(f"✅ 划转成功: {amount} USDC ({direction})")

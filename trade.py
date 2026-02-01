@@ -22,18 +22,29 @@ def do_stablecoin_trade(exchange: str = None):
 
     if exchange:
         if exchange.startswith("binance"):
-            trade_bfusd_usdt(exchange)
+            # Binance 支持多个稳定币交易对
+            pair_idx = select_option("选择交易对:", [
+                "BFUSD/USDT",
+                "USD1/USDT",
+                "返回"
+            ])
+            if pair_idx == 0:
+                trade_bfusd_usdt(exchange)
+            elif pair_idx == 1:
+                trade_usd1_usdt(exchange)
+            return
         elif exchange.startswith("bybit"):
             trade_usdc_usdt(exchange)
-        return
+            return
 
     pair_idx = select_option("选择交易对:", [
         "USDC/USDT (Bybit)",
         "BFUSD/USDT (Binance)",
+        "USD1/USDT (Binance)",
         "返回"
     ])
 
-    if pair_idx == 2:
+    if pair_idx == 3:
         return
 
     if pair_idx == 0:
@@ -42,6 +53,8 @@ def do_stablecoin_trade(exchange: str = None):
             trade_usdc_usdt(exchange)
     elif pair_idx == 1:
         trade_bfusd_usdt()
+    elif pair_idx == 2:
+        trade_usd1_usdt()
 
 
 def trade_usdc_usdt(exchange: str):
@@ -213,6 +226,81 @@ def trade_bfusd_usdt(exchange: str = None):
         input("\n按回车继续...")
 
 
+def trade_usd1_usdt(exchange: str = None):
+    """Binance USD1/USDT 交易"""
+    if not exchange:
+        exchange = select_exchange(binance_only=True)
+        if not exchange:
+            return
+
+    display_name = get_exchange_display_name(exchange)
+    print(f"\n=== {display_name} USD1/USDT 交易 ===")
+
+    while True:
+        print("\n正在获取 USD1/USDT 深度...")
+        try:
+            output = run_on_ec2("orderbook binance USD1USDT")
+            print(output)
+        except SSHError as e:
+            print(f"获取深度失败: {e}")
+
+        print(f"正在查询 {display_name} 现货账户 USDT 余额...")
+        try:
+            output = run_on_ec2(f"account_balance {exchange} SPOT USDT")
+            balance = output.strip()
+            print(f"现货账户 USDT 余额: {balance}")
+        except SSHError as e:
+            print(f"查询余额失败: {e}")
+            balance = "未知"
+
+        action = select_option("选择操作:", ["市价买入 USD1", "限价买入 USD1", "刷新深度", "返回"])
+
+        if action == 3:
+            break
+        elif action == 2:
+            continue
+
+        amount = input_amount("请输入买入 USD1 数量:")
+        if amount is None:
+            continue
+
+        if action == 0:
+            if select_option(f"确认市价买入 {amount} USD1?", ["确认", "取消"]) == 0:
+                print("\n正在下单...")
+                try:
+                    output = run_on_ec2(f"buy_usd1 {exchange} market {amount}")
+                    print(output)
+                    if "error" in output.lower() or "失败" in output:
+                        print("\n下单可能失败，请检查交易所确认")
+                except SSHError as e:
+                    print(f"下单失败: {e}")
+
+        elif action == 1:
+            price_str = input("请输入限价 (如 1.0002, 输入 0 返回): ").strip()
+            if not price_str or price_str == "0":
+                continue
+            try:
+                price = float(price_str)
+                if price <= 0:
+                    print("价格必须大于0")
+                    continue
+            except ValueError:
+                print("请输入有效的数字")
+                continue
+
+            if select_option(f"确认以 {price} 限价买入 {amount} USD1?", ["确认", "取消"]) == 0:
+                print("\n正在下单...")
+                try:
+                    output = run_on_ec2(f"buy_usd1 {exchange} limit {amount} {price}")
+                    print(output)
+                    if "error" in output.lower() or "失败" in output:
+                        print("\n下单可能失败，请检查交易所确认")
+                except SSHError as e:
+                    print(f"下单失败: {e}")
+
+        input("\n按回车继续...")
+
+
 # ===================== 撤单功能 =====================
 
 def get_spot_open_orders(exchange: str) -> list:
@@ -231,6 +319,32 @@ def get_spot_open_orders(exchange: str) -> list:
                 'side': o.get('side', ''),
                 'price': o.get('price', ''),
                 'qty': o.get('origQty', ''),
+                'orderId': o.get('orderId', '')
+            } for o in orders]
+        elif exchange_base == "gate":
+            output = run_on_ec2(f"gate_spot_orders {exchange}")
+            orders = json.loads(output.strip())
+            if isinstance(orders, dict) and "error" in orders:
+                print(f"获取现货挂单失败: {orders['error']}")
+                return []
+            return [{
+                'symbol': o.get('currency_pair', ''),
+                'side': o.get('side', '').upper(),
+                'price': o.get('price', ''),
+                'qty': o.get('amount', ''),
+                'orderId': o.get('id', '')
+            } for o in orders]
+        elif exchange_base == "bitget":
+            output = run_on_ec2(f"bitget_spot_orders {exchange}")
+            orders = json.loads(output.strip())
+            if isinstance(orders, dict) and "error" in orders:
+                print(f"获取现货挂单失败: {orders['error']}")
+                return []
+            return [{
+                'symbol': o.get('symbol', ''),
+                'side': o.get('side', '').upper(),
+                'price': o.get('price', ''),
+                'qty': o.get('size', ''),
                 'orderId': o.get('orderId', '')
             } for o in orders]
         else:
@@ -333,6 +447,18 @@ def cancel_single_order(exchange: str, order_type: str, symbol: str, order_id: s
 
             result = json.loads(output.strip())
             return 'orderId' in result or 'status' in result
+
+        elif exchange_base == "gate":
+            output = run_on_ec2(f"gate_cancel_spot {exchange} {symbol} {order_id}")
+            result = json.loads(output.strip())
+            # Gate API 返回成功撤单时包含 id 字段
+            return 'id' in result or 'status' in result
+
+        elif exchange_base == "bitget":
+            output = run_on_ec2(f"bitget_cancel_spot {exchange} {symbol} {order_id}")
+            result = json.loads(output.strip())
+            # Bitget API 返回成功撤单时包含 orderId 字段
+            return 'orderId' in result or result.get('code') == '00000'
 
         elif exchange_base == "aster":
             output = run_on_ec2(f"aster_cancel {exchange} {symbol} {order_id}")
@@ -503,6 +629,16 @@ def cancel_orders_menu(exchange: str):
             elif action == 0:
                 cancel_futures_orders(exchange, use_portfolio=False)
 
+        elif exchange_base == "gate":
+            # Gate.io 目前只支持现货撤单
+            cancel_spot_orders(exchange)
+            return
+
+        elif exchange_base == "bitget":
+            # Bitget 目前只支持现货撤单
+            cancel_spot_orders(exchange)
+            return
+
         else:
             options = ["现货撤单", "永续撤单", "返回"]
             action = select_option("选择订单类型:", options)
@@ -525,6 +661,34 @@ def get_spot_balances(exchange: str) -> list:
     balances = []
 
     try:
+        # Bitget/Gate 使用专门的命令获取所有可卖出资产
+        if exchange_base == "bitget":
+            output = run_on_ec2(f"bitget_spot_assets {exchange}")
+            try:
+                assets = json.loads(output.strip())
+                if isinstance(assets, list):
+                    return [a for a in assets if a.get('free', 0) > 0]
+                elif isinstance(assets, dict) and 'error' in assets:
+                    print(f"获取资产失败: {assets['error']}")
+                    return []
+            except json.JSONDecodeError:
+                print(f"解析资产数据失败")
+                return []
+
+        if exchange_base == "gate":
+            output = run_on_ec2(f"gate_spot_assets {exchange}")
+            try:
+                assets = json.loads(output.strip())
+                if isinstance(assets, list):
+                    return [a for a in assets if a.get('free', 0) > 0]
+                elif isinstance(assets, dict) and 'error' in assets:
+                    print(f"获取资产失败: {assets['error']}")
+                    return []
+            except json.JSONDecodeError:
+                print(f"解析资产数据失败")
+                return []
+
+        # 其他交易所使用 balance 命令
         output = run_on_ec2(f"balance {exchange}")
 
         raw_balances = []
@@ -571,18 +735,17 @@ def get_spot_balances(exchange: str) -> list:
 def display_balances(balances: list) -> None:
     """显示余额列表"""
     if not balances:
-        print(f"\n没有可卖出的资产 (>=${MIN_DISPLAY_VALUE} USD)")
+        print(f"\n没有可卖出的资产")
         return
 
     print(f"\n{'=' * 50}")
-    print(f"  可卖出资产列表 (>=${MIN_DISPLAY_VALUE} USD)")
+    print(f"  可卖出资产列表")
     print("=" * 50)
 
     for i, balance in enumerate(balances, 1):
         asset = balance['asset']
         free = balance['free']
-        value = balance['value']
-        print(f"  {i}. {asset}: {free:.6f} (约${value:.2f})")
+        print(f"  {i}. {asset}: {free:.6f}")
 
 
 def market_sell_spot(exchange: str, symbol: str, qty: float) -> bool:
@@ -596,6 +759,26 @@ def market_sell_spot(exchange: str, symbol: str, qty: float) -> bool:
             if 'orderId' in result:
                 print(f"  订单ID: {result['orderId']}")
                 print(f"  成交数量: {result.get('executedQty', 'N/A')}")
+                return True
+            else:
+                print(f"  错误: {result.get('msg', result)}")
+                return False
+        elif exchange_base == "gate":
+            output = run_on_ec2(f"gate_market_sell {exchange} {symbol} {qty}")
+            result = json.loads(output.strip())
+            if 'id' in result:
+                print(f"  订单ID: {result['id']}")
+                print(f"  成交数量: {result.get('amount', 'N/A')}")
+                return True
+            else:
+                print(f"  错误: {result.get('message', result)}")
+                return False
+        elif exchange_base == "bitget":
+            output = run_on_ec2(f"bitget_market_sell {exchange} {symbol} {qty}")
+            result = json.loads(output.strip())
+            data = result.get('data') or {}
+            if result.get('code') == '00000' or 'orderId' in data:
+                print(f"  订单ID: {data.get('orderId', 'N/A')}")
                 return True
             else:
                 print(f"  错误: {result.get('msg', result)}")
