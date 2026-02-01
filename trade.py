@@ -1038,9 +1038,8 @@ def futures_close_menu(exchange: str):
                 symbol = pos["symbol"]
                 side = "多" if pos["side"] == "LONG" else "空"
                 amt = pos["positionAmt"]
-                pnl = pos["unrealizedPnl"]
-                pnl_str = f"+{pnl:.2f}" if pnl >= 0 else f"{pnl:.2f}"
-                pos_names.append(f"{symbol} [{side}] 数量:{amt:.4f} 盈亏:${pnl_str}")
+                notional = pos["notional"]
+                pos_names.append(f"{symbol} [{side}] 数量:{amt:.4f} 价值:${notional:,.2f}")
 
             pos_idx = select_option("选择要平仓的持仓:", pos_names, allow_back=True)
             if pos_idx == -1:

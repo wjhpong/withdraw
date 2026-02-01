@@ -18,7 +18,7 @@ from earn import manage_earn
 from trade import do_stablecoin_trade, cancel_orders_menu, market_sell_menu, futures_close_menu
 from addresses import manage_addresses
 from bnb_tools import manage_bnb_tools
-from funding import show_funding_rate
+from funding import show_funding_rate, show_binance_funding_history, show_aster_funding_history, show_hyperliquid_funding_history
 
 
 def main():
@@ -63,6 +63,7 @@ def main():
                 options.append(("查询余额", lambda: show_hyperliquid_balance()))
                 options.append(("账户划转", lambda: do_hyperliquid_transfer("hyperliquid")))
                 options.append(("保证金率", lambda: show_hyperliquid_margin_ratio()))
+                options.append(("历史费率", lambda u=user_id: show_hyperliquid_funding_history(u)))
             elif exchange_base == "lighter":
                 options.append(("查询余额", lambda: show_lighter_balance()))
                 options.append(("保证金率", lambda: show_lighter_margin_ratio()))
@@ -89,6 +90,7 @@ def main():
                     options.append(("稳定币交易", lambda ex=ec2_exchange: do_stablecoin_trade(ex)))
                     options.append(("BNB工具", lambda ex=ec2_exchange: manage_bnb_tools(ex)))
                     options.append(("统一保证金率", lambda ex=ec2_exchange: show_pm_ratio(ex)))
+                    options.append(("历史费率", lambda ex=ec2_exchange: show_binance_funding_history(ex)))
 
                 # Gate 特有功能
                 if exchange_base == "gate":
@@ -101,6 +103,7 @@ def main():
                 # Aster 特有功能
                 if exchange_base == "aster":
                     options.append(("统一保证金率", lambda ex=ec2_exchange: show_aster_margin_ratio(ex)))
+                    options.append(("历史费率", lambda ex=ec2_exchange: show_aster_funding_history(ex)))
 
                 # 地址管理 (Aster 不需要)
                 if exchange_base != "aster":
