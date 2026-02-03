@@ -111,12 +111,72 @@ def get_ssh_config():
     return ssh_host, ssh_user, ssh_hostname, ssh_port, ssh_key
 
 
-def run_on_ec2(cmd: str) -> str:
-    """在 EC2 上执行命令并返回结果"""
-    ssh_host, ssh_user, ssh_hostname, ssh_port, ssh_key = get_ssh_config()
+def get_control_socket_path():
+    """获取 SSH ControlMaster socket 路径"""
+    import os
+    # 使用 /tmp 目录，路径尽量短以避免 Unix socket 路径过长问题
+    return "/tmp/ec2_ctl"
 
-    # 构建SSH命令
-    ssh_cmd_parts = ["ssh"]
+
+def ensure_ssh_connection():
+    """确保 SSH ControlMaster 连接已建立"""
+    import os
+
+    ssh_host, ssh_user, ssh_hostname, ssh_port, ssh_key = get_ssh_config()
+    socket_path = get_control_socket_path()
+
+    # 构建 SSH 目标
+    if ssh_hostname:
+        if ssh_user:
+            ssh_target = f"{ssh_user}@{ssh_hostname}"
+        else:
+            ssh_target = ssh_hostname
+    else:
+        ssh_target = ssh_host
+
+    # 检查连接是否存在
+    check_cmd = ["ssh", "-O", "check", "-o", f"ControlPath={socket_path}", ssh_target]
+    result = subprocess.run(check_cmd, capture_output=True, text=True)
+
+    if result.returncode == 0:
+        # 连接已存在
+        return True
+
+    # 建立新的 ControlMaster 连接
+    print("正在建立 EC2 连接...")
+    ssh_cmd = ["ssh", "-fNM",  # -f 后台, -N 不执行命令, -M 主连接
+               "-o", f"ControlPath={socket_path}",
+               "-o", "ControlPersist=600",  # 保持 10 分钟
+               "-o", "ServerAliveInterval=30"]
+
+    if ssh_hostname:
+        if ssh_port:
+            ssh_cmd.extend(["-p", str(ssh_port)])
+        if ssh_key:
+            ssh_cmd.extend(["-i", ssh_key])
+        ssh_cmd.append(ssh_target)
+    else:
+        ssh_cmd.append(ssh_target)
+
+    result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=30)
+    if result.returncode != 0:
+        print(f"建立连接失败: {result.stderr}")
+        return False
+
+    print("EC2 连接已建立 ✓")
+    return True
+
+
+def run_on_ec2(cmd: str) -> str:
+    """在 EC2 上执行命令并返回结果（使用连接复用）"""
+    ssh_host, ssh_user, ssh_hostname, ssh_port, ssh_key = get_ssh_config()
+    socket_path = get_control_socket_path()
+
+    # 确保连接存在
+    ensure_ssh_connection()
+
+    # 构建SSH命令（使用 ControlPath 复用连接）
+    ssh_cmd_parts = ["ssh", "-o", f"ControlPath={socket_path}"]
 
     # 如果配置了详细的SSH信息，使用完整SSH命令
     if ssh_hostname:

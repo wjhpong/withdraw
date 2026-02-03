@@ -9,6 +9,7 @@ from utils import run_on_ec2, select_option, SSHError
 BINANCE_BASE = "https://fapi.binance.com"
 ASTER_BASE = "https://fapi.asterdex.com"
 HYPERLIQUID_BASE = "https://api.hyperliquid.xyz"
+LIGHTER_BASE = "https://mainnet.zklighter.elliot.ai"
 
 
 def get_hyperliquid_funding_history(coin: str, days: int = 7):
@@ -542,6 +543,430 @@ def show_binance_funding_history(exchange: str = None):
     print(f"📈 日均收入: {avg_daily:>+,.4f} USDT")
     print(f"📅 年化收入: {avg_daily * 365:>+,.2f} USDT")
     print("=" * 80)
+
+
+def get_lighter_markets():
+    """获取 Lighter 市场信息，返回 symbol -> market_id 映射"""
+    url = f"{LIGHTER_BASE}/api/v1/orderBooks"
+    try:
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            markets = {}
+            for market in data.get("order_books", []):
+                symbol = market.get("symbol", "")
+                market_id = market.get("market_id")
+                if symbol and market_id is not None:
+                    markets[symbol] = market_id
+            return markets
+        return {}
+    except Exception:
+        return {}
+
+
+def get_lighter_account_index(wallet_address: str):
+    """通过钱包地址获取 account_index"""
+    url = f"{LIGHTER_BASE}/api/v1/account"
+    params = {
+        "by": "l1_address",
+        "value": wallet_address
+    }
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            # 返回主账户的 index
+            accounts = data.get("accounts", [])
+            for acc in accounts:
+                if acc.get("account_type") == 0:
+                    return acc.get("account_index")
+            # 如果没有主账户，返回第一个
+            if accounts:
+                return accounts[0].get("account_index")
+        return None
+    except Exception:
+        return None
+
+
+def get_lighter_funding_history(market_id: int, days: int = 7):
+    """查询 Lighter 历史资金费率
+
+    Args:
+        market_id: 市场ID
+        days: 查询天数
+
+    Returns:
+        list: 资金费率记录列表
+    """
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    start_time = int((now - timedelta(days=days)).timestamp())
+    end_time = int(now.timestamp())
+
+    url = f"{LIGHTER_BASE}/api/v1/fundings"
+    params = {
+        "market_id": market_id,
+        "resolution": "1h",
+        "start_timestamp": start_time,
+        "end_timestamp": end_time,
+        "count_back": days * 24  # 每小时一次
+    }
+
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get("fundings", [])
+        else:
+            print(f"获取费率失败: {resp.status_code}")
+            return []
+    except Exception as e:
+        print(f"请求失败: {e}")
+        return []
+
+
+def get_lighter_position_funding(account_index: int, market_id: int = 255, limit: int = 100):
+    """查询 Lighter 用户持仓资金费收入
+
+    Args:
+        account_index: 账户索引
+        market_id: 市场ID，255表示全部
+        limit: 返回记录数量
+
+    Returns:
+        list: 资金费收入记录列表
+    """
+    url = f"{LIGHTER_BASE}/api/v1/positionFunding"
+    params = {
+        "account_index": account_index,
+        "market_id": market_id,
+        "limit": limit
+    }
+
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get("fundings", [])
+        else:
+            print(f"获取资金费失败: {resp.status_code}")
+            return []
+    except Exception as e:
+        print(f"请求失败: {e}")
+        return []
+
+
+
+def _get_lighter_position_funding_with_auth(account_index: int, api_key: str, key_index: int, market_id: int = 255, days: int = 7):
+    """使用认证获取用户资金费收入 (使用 requests 避免 brotli 问题，支持分页)"""
+    import time
+    from lighter.signer_client import get_signer
+
+    # 创建底层 signer 并生成 auth token
+    signer = get_signer()
+    chain_id = 304  # mainnet
+
+    # 创建 client (传入所有必需参数)
+    err = signer.CreateClient(
+        LIGHTER_BASE.encode("utf-8"),
+        api_key.encode("utf-8"),
+        chain_id,
+        key_index,
+        account_index,
+    )
+    if err is not None:
+        raise Exception(f"CreateClient 失败: {err.decode('utf-8')}")
+
+    # 计算 deadline (10分钟后)
+    deadline = int(time.time()) + 10 * 60
+
+    # 创建 auth token
+    result = signer.CreateAuthToken(deadline, key_index, account_index)
+    auth_token = result.str.decode("utf-8") if result.str else None
+    error = result.err.decode("utf-8") if result.err else None
+    if error:
+        raise Exception(f"创建认证token失败: {error}")
+
+    # 计算截止时间
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    cutoff_time = int((now - timedelta(days=days)).timestamp())
+
+    # 分页获取所有数据
+    url = f"{LIGHTER_BASE}/api/v1/positionFunding"
+    headers = {"Accept-Encoding": "gzip, deflate"}
+    all_fundings = []
+    cursor = None
+    max_pages = 20  # 防止无限循环
+
+    for _ in range(max_pages):
+        params = {
+            "account_index": account_index,
+            "market_id": market_id,
+            "limit": 100,
+            "auth": auth_token
+        }
+        if cursor:
+            params["cursor"] = cursor
+
+        resp = requests.get(url, params=params, headers=headers, timeout=30)
+        if resp.status_code != 200:
+            raise Exception(f"API 错误: {resp.status_code} - {resp.text}")
+
+        data = resp.json()
+        page_fundings = data.get("position_fundings", [])
+
+        if not page_fundings:
+            break
+
+        # 检查是否已经超出时间范围
+        for f in page_fundings:
+            if f.get("timestamp", 0) >= cutoff_time:
+                all_fundings.append(type('Funding', (), f)())
+            else:
+                # 数据按时间倒序，遇到超出范围的就停止
+                return type('Result', (), {'fundings': all_fundings})()
+
+        # 获取下一页 cursor
+        cursor = data.get("next_cursor")
+        if not cursor:
+            break
+
+    return type('Result', (), {'fundings': all_fundings})()
+
+
+def show_lighter_funding_history(user: str = "eb65"):
+    """显示 Lighter 历史资金费率和实际收入"""
+    import json
+
+    # 获取市场信息
+    print("\n正在获取市场信息...")
+    markets = get_lighter_markets()
+    if not markets:
+        print("无法获取市场信息")
+        return
+
+    # 构建 market_id -> symbol 映射
+    market_id_to_symbol = {v: k for k, v in markets.items()}
+
+    # 显示可用市场（按字母排序，优先显示常见币种）
+    common_coins = ["BTC", "ETH", "SOL", "DOGE", "XRP", "SUI", "PEPE", "WIF", "LINK", "AVAX", "LIT"]
+    available_symbols = sorted(markets.keys())
+    # 将常见币种放前面
+    display_order = [c for c in common_coins if c in available_symbols]
+    display_order += [s for s in available_symbols if s not in common_coins][:5]
+    print(f"可用市场: {', '.join(display_order)}...")
+
+    symbol = input("\n请输入币种 (如 BTC, ETH, LIT, 直接回车查询全部): ").strip().upper()
+
+    days_str = input("查询天数 (默认7天): ").strip()
+    days = int(days_str) if days_str.isdigit() else 7
+
+    # 清理输入
+    coin = symbol.replace("USDT", "").replace("_PERP", "").replace("/USDC", "") if symbol else ""
+    target_market_id = markets.get(coin) if coin else 255  # 255 表示全部
+
+    if coin and target_market_id is None:
+        print(f"未找到 {coin} 市场")
+        # 尝试模糊匹配
+        matches = [s for s in markets.keys() if coin in s.upper()]
+        if matches:
+            print(f"你是否想查询: {', '.join(matches[:5])}")
+        return
+
+    # 尝试获取用户实际收入
+    income_records = []
+    account_index = None
+    try:
+        config = json.load(open("config.json"))
+        user_data = config.get("users", {}).get(user, {})
+        lighter_config = user_data.get("accounts", {}).get("lighter", {})
+        wallet_address = lighter_config.get("wallet_address")
+        api_key = lighter_config.get("api_key")
+        key_index = lighter_config.get("key_index", 0)
+
+        if wallet_address and api_key:
+            # 获取 account_index
+            account_index = get_lighter_account_index(wallet_address)
+            if account_index is not None:
+                print("\n正在获取实际资金费收入...")
+                try:
+                    result = _get_lighter_position_funding_with_auth(
+                        account_index, api_key, key_index, target_market_id, days=days
+                    )
+                    if result and hasattr(result, 'fundings'):
+                        income_records = result.fundings or []
+                except Exception as e:
+                    print(f"获取收入失败: {e}")
+    except Exception:
+        pass
+
+    # 如果指定了币种，获取费率数据
+    rate_records = []
+    if coin and target_market_id != 255:
+        print(f"正在查询 {coin} 历史费率...")
+        rate_records = get_lighter_funding_history(target_market_id, days)
+
+    # 显示结果
+    if coin and rate_records:
+        show_lighter_rate_and_income(coin, rate_records, income_records, market_id_to_symbol, days)
+    elif income_records:
+        show_lighter_all_income(income_records, market_id_to_symbol, days)
+    elif coin:
+        print("没有费率数据")
+    else:
+        print("没有资金费收入记录")
+
+
+def show_lighter_all_income(income_records: list, market_id_to_symbol: dict, days: int):
+    """显示所有币种的资金费收入"""
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    cutoff_time = int((now - timedelta(days=days)).timestamp())
+
+    # 按币种和日期分组
+    coin_daily_stats = {}
+    for record in income_records:
+        timestamp = int(record.timestamp) if hasattr(record, 'timestamp') else int(record.get("timestamp", 0))
+        if timestamp < cutoff_time:
+            continue
+
+        change = float(record.change) if hasattr(record, 'change') else float(record.get("change", 0))
+        market_id = record.market_id if hasattr(record, 'market_id') else record.get("market_id")
+        coin = market_id_to_symbol.get(market_id, f"MARKET_{market_id}")
+
+        dt = datetime.fromtimestamp(timestamp, tz=ZoneInfo("Asia/Shanghai"))
+        date_str = dt.strftime("%Y-%m-%d")
+
+        if coin not in coin_daily_stats:
+            coin_daily_stats[coin] = {}
+        if date_str not in coin_daily_stats[coin]:
+            coin_daily_stats[coin][date_str] = {"sum": 0, "count": 0}
+
+        coin_daily_stats[coin][date_str]["sum"] += change
+        coin_daily_stats[coin][date_str]["count"] += 1
+
+    if not coin_daily_stats:
+        print("没有资金费收入记录")
+        return
+
+    print(f"\n{'=' * 70}")
+    print(f"  Lighter 资金费收入 (最近 {days} 天)")
+    print("=" * 70)
+
+    grand_total = 0
+
+    for coin in sorted(coin_daily_stats.keys()):
+        daily_stats = coin_daily_stats[coin]
+        print(f"\n {coin}")
+        print("-" * 65)
+        print(f"{'日期':<12} {'结算次数':<8} {'收入(USD)':<15}")
+        print("-" * 65)
+
+        coin_total = 0
+        for date_str in sorted(daily_stats.keys(), reverse=True):
+            stats = daily_stats[date_str]
+            count = stats["count"]
+            daily_sum = stats["sum"]
+            coin_total += daily_sum
+            print(f"{date_str:<12} {count:<8} ${daily_sum:>+.4f}")
+
+        print("-" * 65)
+        print(f"{'小计':<12} {'':<8} ${coin_total:>+.4f}")
+        grand_total += coin_total
+
+    print(f"\n{'=' * 70}")
+    print(f"总收入: ${grand_total:>+.4f}")
+    avg_daily = grand_total / days if days > 0 else 0
+    print(f"日均收入: ${avg_daily:>+.4f}")
+    print(f"年化收入: ${avg_daily * 365:>+.2f}")
+    print("=" * 70)
+
+
+def show_lighter_rate_and_income(coin: str, rate_records: list, income_records: list, market_id_to_symbol: dict, days: int):
+    """显示费率和实际收入数据"""
+    # 处理费率数据
+    rate_data = {}
+    for record in rate_records:
+        funding_time = int(record.get("timestamp", 0))
+        rate = float(record.get("rate", 0))
+        if funding_time > 0:
+            dt = datetime.fromtimestamp(funding_time, tz=ZoneInfo("Asia/Shanghai"))
+            date_str = dt.strftime("%Y-%m-%d")
+            if date_str not in rate_data:
+                rate_data[date_str] = {"rates": [], "sum": 0, "count": 0}
+            rate_data[date_str]["rates"].append(rate)
+            rate_data[date_str]["sum"] += rate
+            rate_data[date_str]["count"] += 1
+
+    # 处理收入数据
+    income_data = {}
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    cutoff_time = int((now - timedelta(days=days)).timestamp())
+
+    for record in income_records:
+        # SDK 返回的是对象
+        timestamp = int(record.timestamp) if hasattr(record, 'timestamp') else int(record.get("timestamp", 0))
+        if timestamp < cutoff_time:
+            continue
+
+        change = float(record.change) if hasattr(record, 'change') else float(record.get("change", 0))
+        market_id = record.market_id if hasattr(record, 'market_id') else record.get("market_id")
+
+        # 检查是否是目标币种
+        record_symbol = market_id_to_symbol.get(market_id, "")
+        if record_symbol != coin:
+            continue
+
+        dt = datetime.fromtimestamp(timestamp, tz=ZoneInfo("Asia/Shanghai"))
+        date_str = dt.strftime("%Y-%m-%d")
+        if date_str not in income_data:
+            income_data[date_str] = {"sum": 0, "count": 0}
+        income_data[date_str]["sum"] += change
+        income_data[date_str]["count"] += 1
+
+    if not rate_data:
+        print("没有费率数据")
+        return
+
+    has_income = bool(income_data)
+
+    print(f"\n{'=' * 70}")
+    print(f"  {coin} 历史费率 (最近 {days} 天)")
+    print("=" * 70)
+
+    if has_income:
+        print(f"{'日期':<12} {'次数':<6} {'累计费率':<12} {'年化费率':<12} {'实际收入':<12}")
+    else:
+        print(f"{'日期':<12} {'次数':<6} {'累计费率':<12} {'年化费率':<12}")
+    print("-" * 65)
+
+    total_rate = 0
+    total_income = 0
+    for date_str in sorted(rate_data.keys(), reverse=True):
+        stats = rate_data[date_str]
+        count = stats["count"]
+        daily_rate = stats["sum"]
+        total_rate += daily_rate
+        annual_rate = daily_rate * 365
+
+        if has_income:
+            daily_income = income_data.get(date_str, {}).get("sum", 0)
+            total_income += daily_income
+            print(f"{date_str:<12} {count:<6} {daily_rate:>+.4f}%     {annual_rate:>+.2f}%      ${daily_income:>+.2f}")
+        else:
+            print(f"{date_str:<12} {count:<6} {daily_rate:>+.4f}%     {annual_rate:>+.2f}%")
+
+    print("-" * 65)
+    avg_daily_rate = total_rate / len(rate_data) if rate_data else 0
+    annual_avg = avg_daily_rate * 365
+
+    if has_income:
+        avg_daily_income = total_income / len(rate_data) if rate_data else 0
+        print(f"{'平均':<12} {'':<6} {avg_daily_rate:>+.4f}%     {annual_avg:>+.2f}%      ${avg_daily_income:>+.2f}")
+        print("=" * 70)
+        print(f"总收入: ${total_income:>+.2f}")
+        print(f"年化收入: ${avg_daily_income * 365:>+.2f}")
+    else:
+        print(f"{'平均':<12} {'':<6} {avg_daily_rate:>+.4f}%     {annual_avg:>+.2f}%")
+    print("=" * 70)
 
 
 def show_funding_rate(exchange: str = None):

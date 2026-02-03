@@ -18,7 +18,7 @@ from earn import manage_earn
 from trade import do_stablecoin_trade, cancel_orders_menu, market_sell_menu, futures_close_menu
 from addresses import manage_addresses
 from bnb_tools import manage_bnb_tools
-from funding import show_funding_rate, show_binance_funding_history, show_aster_funding_history, show_hyperliquid_funding_history
+from funding import show_funding_rate, show_binance_funding_history, show_aster_funding_history, show_hyperliquid_funding_history, show_lighter_funding_history
 
 
 def main():
@@ -67,12 +67,13 @@ def main():
             elif exchange_base == "lighter":
                 options.append(("查询余额", lambda: show_lighter_balance()))
                 options.append(("保证金率", lambda: show_lighter_margin_ratio()))
+                options.append(("历史费率", lambda u=user_id: show_lighter_funding_history(u)))
             else:
                 # 所有其他交易所都支持查询余额
                 options.append(("查询余额", lambda ex=ec2_exchange: show_balance(ex)))
 
-                # Aster 和 Gate 不支持提现
-                if exchange_base not in ("aster", "gate"):
+                # Aster 和 Gate 不支持提现，Frances/Vanie/李天一 禁用提现
+                if exchange_base not in ("aster", "gate") and user_id not in ("frances", "vanie", "litianyi"):
                     options.append(("提现", lambda ex=ec2_exchange: do_withdraw(ex)))
 
                 # 账户划转 (Gate 不支持)
@@ -105,8 +106,8 @@ def main():
                     options.append(("统一保证金率", lambda ex=ec2_exchange: show_aster_margin_ratio(ex)))
                     options.append(("历史费率", lambda ex=ec2_exchange: show_aster_funding_history(ex)))
 
-                # 地址管理 (Aster 不需要)
-                if exchange_base != "aster":
+                # 地址管理 (Aster 不需要，Frances/Vanie/李天一 禁用)
+                if exchange_base != "aster" and user_id not in ("frances", "vanie", "litianyi"):
                     options.append(("管理地址簿", lambda ex=ec2_exchange: manage_addresses(ex)))
 
             # 导航选项

@@ -29,6 +29,7 @@
     "user": null,
     "hostname": null,
     "port": null,
-    "key": null
+    "key": null,
+    "remote_config_path": "~/config.json"
   }
 }

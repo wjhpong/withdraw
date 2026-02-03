@@ -244,27 +244,31 @@ def trade_usd1_usdt(exchange: str = None):
         except SSHError as e:
             print(f"获取深度失败: {e}")
 
-        print(f"正在查询 {display_name} 现货账户 USDT 余额...")
+        print(f"正在查询 {display_name} 现货账户余额...")
+        usdt_balance = "0"
+        usd1_balance = "0"
         try:
             output = run_on_ec2(f"account_balance {exchange} SPOT USDT")
-            balance = output.strip()
-            print(f"现货账户 USDT 余额: {balance}")
+            usdt_balance = output.strip()
+            output2 = run_on_ec2(f"account_balance {exchange} SPOT USD1")
+            usd1_balance = output2.strip()
+            print(f"USDT 余额: {usdt_balance}")
+            print(f"USD1 余额: {usd1_balance}")
         except SSHError as e:
             print(f"查询余额失败: {e}")
-            balance = "未知"
 
-        action = select_option("选择操作:", ["市价买入 USD1", "限价买入 USD1", "刷新深度", "返回"])
+        action = select_option("选择操作:", ["市价买入 USD1", "限价买入 USD1", "市价卖出 USD1", "限价卖出 USD1", "刷新深度", "返回"])
 
-        if action == 3:
+        if action == 5:  # 返回
             break
-        elif action == 2:
+        elif action == 4:  # 刷新深度
             continue
 
-        amount = input_amount("请输入买入 USD1 数量:")
-        if amount is None:
-            continue
-
-        if action == 0:
+        # 买入操作
+        if action == 0:  # 市价买入
+            amount = input_amount("请输入买入 USD1 数量:")
+            if amount is None:
+                continue
             if select_option(f"确认市价买入 {amount} USD1?", ["确认", "取消"]) == 0:
                 print("\n正在下单...")
                 try:
@@ -275,7 +279,10 @@ def trade_usd1_usdt(exchange: str = None):
                 except SSHError as e:
                     print(f"下单失败: {e}")
 
-        elif action == 1:
+        elif action == 1:  # 限价买入
+            amount = input_amount("请输入买入 USD1 数量:")
+            if amount is None:
+                continue
             price_str = input("请输入限价 (如 1.0002, 输入 0 返回): ").strip()
             if not price_str or price_str == "0":
                 continue
@@ -292,6 +299,47 @@ def trade_usd1_usdt(exchange: str = None):
                 print("\n正在下单...")
                 try:
                     output = run_on_ec2(f"buy_usd1 {exchange} limit {amount} {price}")
+                    print(output)
+                    if "error" in output.lower() or "失败" in output:
+                        print("\n下单可能失败，请检查交易所确认")
+                except SSHError as e:
+                    print(f"下单失败: {e}")
+
+        # 卖出操作
+        elif action == 2:  # 市价卖出
+            amount = input_amount("请输入卖出 USD1 数量:")
+            if amount is None:
+                continue
+            if select_option(f"确认市价卖出 {amount} USD1?", ["确认", "取消"]) == 0:
+                print("\n正在下单...")
+                try:
+                    output = run_on_ec2(f"sell_usd1 {exchange} market {amount}")
+                    print(output)
+                    if "error" in output.lower() or "失败" in output:
+                        print("\n下单可能失败，请检查交易所确认")
+                except SSHError as e:
+                    print(f"下单失败: {e}")
+
+        elif action == 3:  # 限价卖出
+            amount = input_amount("请输入卖出 USD1 数量:")
+            if amount is None:
+                continue
+            price_str = input("请输入限价 (如 1.0008, 输入 0 返回): ").strip()
+            if not price_str or price_str == "0":
+                continue
+            try:
+                price = float(price_str)
+                if price <= 0:
+                    print("价格必须大于0")
+                    continue
+            except ValueError:
+                print("请输入有效的数字")
+                continue
+
+            if select_option(f"确认以 {price} 限价卖出 {amount} USD1?", ["确认", "取消"]) == 0:
+                print("\n正在下单...")
+                try:
+                    output = run_on_ec2(f"sell_usd1 {exchange} limit {amount} {price}")
                     print(output)
                     if "error" in output.lower() or "失败" in output:
                         print("\n下单可能失败，请检查交易所确认")
@@ -681,6 +729,34 @@ def get_spot_balances(exchange: str) -> list:
                 assets = json.loads(output.strip())
                 if isinstance(assets, list):
                     return [a for a in assets if a.get('free', 0) > 0]
+                elif isinstance(assets, dict) and 'error' in assets:
+                    print(f"获取资产失败: {assets['error']}")
+                    return []
+            except json.JSONDecodeError:
+                print(f"解析资产数据失败")
+                return []
+
+        # Binance 使用专门的命令获取现货余额
+        if exchange_base == "binance":
+            output = run_on_ec2(f"spot_balance {exchange}")
+            try:
+                assets = json.loads(output.strip())
+                if isinstance(assets, list):
+                    for a in assets:
+                        asset = a.get('asset', '').upper()
+                        free = float(a.get('free', 0))
+                        if asset in STABLECOINS or free <= 0:
+                            continue
+                        price = get_coin_price(asset)
+                        value = free * price
+                        if value >= MIN_DISPLAY_VALUE:
+                            balances.append({
+                                'asset': asset,
+                                'free': free,
+                                'value': value
+                            })
+                    balances.sort(key=lambda x: x['value'], reverse=True)
+                    return balances
                 elif isinstance(assets, dict) and 'error' in assets:
                     print(f"获取资产失败: {assets['error']}")
                     return []
