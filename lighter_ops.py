@@ -9,9 +9,22 @@ from utils import load_config, get_exchange_display_name, input_amount, select_o
 LIGHTER_MAINNET_URL = "https://mainnet.zklighter.elliot.ai"
 
 
-def get_lighter_config(user_id: str = "dennis"):
-    """获取 Lighter 配置"""
+def get_lighter_config(exchange: str = "lighter"):
+    """获取 Lighter 配置，根据 exchange 参数查找对应用户"""
     config = load_config()
+
+    # 从 _legacy 映射获取用户 ID
+    legacy = config.get("_legacy", {})
+    user_id = legacy.get(exchange)
+
+    # 如果没有映射，尝试直接用 exchange 作为 user_id
+    if not user_id:
+        # 尝试解析 exchange 格式，例如 "eb65_lighter" -> "eb65"
+        if "_lighter" in exchange:
+            user_id = exchange.replace("_lighter", "")
+        else:
+            user_id = "dennis"  # 默认用户
+
     user = config.get("users", {}).get(user_id, {})
     lighter_config = user.get("accounts", {}).get("lighter", {})
 
@@ -20,7 +33,7 @@ def get_lighter_config(user_id: str = "dennis"):
     key_index = lighter_config.get("key_index", 0)
 
     if not wallet_address or not api_key:
-        raise ValueError("Lighter 配置缺失，请检查 config.json")
+        raise ValueError(f"Lighter 配置缺失 (用户: {user_id})，请检查 config.json")
 
     return wallet_address, api_key, key_index
 
@@ -57,7 +70,7 @@ def show_lighter_balance(exchange: str = "lighter"):
     print(f"\n正在查询 {display_name} 余额...")
 
     try:
-        wallet_address, _, _ = get_lighter_config()
+        wallet_address, _, _ = get_lighter_config(exchange)
 
         # 运行异步查询
         account_info = asyncio.run(_get_account_info(wallet_address))
@@ -137,7 +150,7 @@ def show_lighter_margin_ratio(exchange: str = "lighter"):
     print(f"\n正在查询 {display_name} 保证金率...")
 
     try:
-        wallet_address, _, _ = get_lighter_config()
+        wallet_address, _, _ = get_lighter_config(exchange)
 
         # 运行异步查询 - 同时获取账户信息和市场价格
         async def fetch_all():

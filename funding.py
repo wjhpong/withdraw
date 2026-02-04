@@ -656,7 +656,7 @@ def get_lighter_position_funding(account_index: int, market_id: int = 255, limit
 
 
 
-def _get_lighter_position_funding_with_auth(account_index: int, api_key: str, key_index: int, market_id: int = 255, days: int = 7):
+def _get_lighter_position_funding_with_auth(account_index: int, api_secret: str, key_index: int, market_id: int = 255, days: int = 7):
     """使用认证获取用户资金费收入 (使用 requests 避免 brotli 问题，支持分页)"""
     import time
     from lighter.signer_client import get_signer
@@ -665,10 +665,10 @@ def _get_lighter_position_funding_with_auth(account_index: int, api_key: str, ke
     signer = get_signer()
     chain_id = 304  # mainnet
 
-    # 创建 client (传入所有必需参数)
+    # 创建 client (传入所有必需参数，api_secret 是私钥)
     err = signer.CreateClient(
         LIGHTER_BASE.encode("utf-8"),
-        api_key.encode("utf-8"),
+        api_secret.encode("utf-8"),
         chain_id,
         key_index,
         account_index,
@@ -780,17 +780,17 @@ def show_lighter_funding_history(user: str = "eb65"):
         user_data = config.get("users", {}).get(user, {})
         lighter_config = user_data.get("accounts", {}).get("lighter", {})
         wallet_address = lighter_config.get("wallet_address")
-        api_key = lighter_config.get("api_key")
+        api_secret = lighter_config.get("api_secret")  # 私钥，用于签名
         key_index = lighter_config.get("key_index", 0)
 
-        if wallet_address and api_key:
+        if wallet_address and api_secret:
             # 获取 account_index
             account_index = get_lighter_account_index(wallet_address)
             if account_index is not None:
                 print("\n正在获取实际资金费收入...")
                 try:
                     result = _get_lighter_position_funding_with_auth(
-                        account_index, api_key, key_index, target_market_id, days=days
+                        account_index, api_secret, key_index, target_market_id, days=days
                     )
                     if result and hasattr(result, 'fundings'):
                         income_records = result.fundings or []
