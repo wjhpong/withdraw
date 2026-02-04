@@ -21,7 +21,8 @@ def do_stablecoin_trade(exchange: str = None):
     print("\n=== 稳定币交易 ===")
 
     if exchange:
-        if exchange.startswith("binance") or "_binance" in exchange:
+        exchange_base = get_exchange_base(exchange)
+        if exchange_base == "binance":
             # Binance 支持多个稳定币交易对
             pair_idx = select_option("选择交易对:", [
                 "USDC/USDT",
@@ -36,7 +37,8 @@ def do_stablecoin_trade(exchange: str = None):
             elif pair_idx == 2:
                 trade_usd1_usdt(exchange)
             return
-        elif exchange.startswith("bybit"):
+        elif exchange_base == "bybit":
+            # Bybit 只支持 USDC/USDT
             trade_usdc_usdt(exchange)
             return
 
@@ -88,11 +90,15 @@ def trade_usdc_usdt(exchange: str):
         print(f"💰 统一账户 USDT: {unified_balance:.4f}")
         print(f"💰 合计 USDT: {funding_balance + unified_balance:.4f}")
 
-        action = select_option("选择操作:", ["市价买入 USDC", "限价买入 USDC", "刷新深度", "返回"])
+        action = select_option("选择操作:", ["市价买入 USDC", "限价买入 USDC", "撤单", "刷新深度", "返回"])
 
-        if action == 3:
+        if action == 4:  # 返回
             break
-        elif action == 2:
+        elif action == 3:  # 刷新深度
+            continue
+        elif action == 2:  # 撤单
+            _cancel_bybit_usdc_orders(exchange)
+            input("\n按回车继续...")
             continue
 
         amount = input_amount("请输入买入 USDC 数量:")
@@ -152,6 +158,26 @@ def trade_usdc_usdt(exchange: str):
                     print(f"下单失败: {e}")
 
         input("\n按回车继续...")
+
+
+def _cancel_bybit_usdc_orders(exchange: str):
+    """撤销 Bybit USDC/USDT 挂单"""
+    print("\n正在查询 USDC/USDT 挂单...")
+    try:
+        output = run_on_ec2(f"open_orders {exchange} USDCUSDT")
+        print(output)
+
+        if "没有" in output or "无" in output or not output.strip():
+            print("没有 USDC/USDT 挂单")
+            return
+
+        action = select_option("选择操作:", ["撤销所有 USDC/USDT 挂单", "返回"])
+        if action == 0:
+            print("\n正在撤销所有挂单...")
+            cancel_output = run_on_ec2(f"cancel_all {exchange} USDCUSDT")
+            print(cancel_output)
+    except SSHError as e:
+        print(f"操作失败: {e}")
 
 
 def trade_usdc_usdt_binance(exchange: str = None):

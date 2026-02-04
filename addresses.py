@@ -65,11 +65,12 @@ def manage_addresses(exchange: str = None):
             for i, addr in enumerate(filtered, 1):
                 addr_type = addr.get('type', 'unknown').upper()
                 memo_str = f" (Memo: {addr['memo']})" if addr.get('memo') else ""
-                # circle和REAP地址显示特殊标记
+                # 显示币种限制
                 coin_restriction = ""
-                if addr.get('name', '').lower() == 'circle':
-                    coin_restriction = " - 仅USDC"
-                elif addr.get('name', '').lower() == 'reap':
+                coins = addr.get('coins', [])
+                if coins:
+                    coin_restriction = f" - 仅{'/'.join(coins)}"
+                elif addr.get('name', '').lower() == 'circle':
                     coin_restriction = " - 仅USDC"
                 print(f"  {i}. [{addr['name']}] ({addr_type}) {addr['address'][:25]}...{coin_restriction}{memo_str}")
         else:

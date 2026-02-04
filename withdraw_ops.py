@@ -102,26 +102,34 @@ def do_withdraw(exchange: str = None):
     # 显示余额（同时查询现货和统一账户）
     print(f"\n正在查询 {coin} 余额...")
     
+    def fmt_bal(bal):
+        """格式化余额显示，避免科学计数法"""
+        try:
+            v = float(bal) if bal else 0
+            return f"{v:.6f}".rstrip('0').rstrip('.') if v < 0.01 else f"{v:.2f}"
+        except:
+            return bal
+
     if exchange_base == "bybit":
         # Bybit: 查询 FUND 和 UNIFIED 账户
         fund_bal = get_coin_balance(exchange, coin, "FUND")
         unified_bal = get_coin_balance(exchange, coin, "UNIFIED")
-        print(f"💰 {coin} 资金账户: {fund_bal}")
-        print(f"💰 {coin} 统一账户: {unified_bal}")
+        print(f"💰 {coin} 资金账户: {fmt_bal(fund_bal)}")
+        print(f"💰 {coin} 统一账户: {fmt_bal(unified_bal)}")
     elif exchange_base == "binance":
         # Binance: 查询 SPOT 和 PM (Portfolio Margin) 账户
         spot_bal = get_coin_balance(exchange, coin, "SPOT")
         pm_bal = get_coin_balance(exchange, coin, "PM")
-        print(f"💰 {coin} 现货账户: {spot_bal}")
-        print(f"💰 {coin} 统一账户: {pm_bal}")
+        print(f"💰 {coin} 现货账户: {fmt_bal(spot_bal)}")
+        print(f"💰 {coin} 统一账户: {fmt_bal(pm_bal)}")
     elif exchange_base == "gate":
         # Gate.io: 查询 SPOT 现货账户
         spot_bal = get_coin_balance(exchange, coin, "SPOT")
-        print(f"💰 {coin} 现货账户: {spot_bal}")
+        print(f"💰 {coin} 现货账户: {fmt_bal(spot_bal)}")
     elif exchange_base == "bitget":
         # Bitget: 查询现货账户
         spot_bal = get_coin_balance(exchange, coin, "SPOT")
-        print(f"💰 {coin} 现货账户: {spot_bal}")
+        print(f"💰 {coin} 现货账户: {fmt_bal(spot_bal)}")
 
     # 处理地址和网络
     # REAP地址强制使用Polygon网络，优先处理，不进入任何网络选择逻辑

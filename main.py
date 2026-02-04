@@ -85,8 +85,9 @@ def main():
                 if exchange_base != "gate":
                     options.append(("账户划转", lambda ex=ec2_exchange: do_transfer(ex)))
 
-                # 交易功能 (撤单、市价卖出)
-                options.append(("撤单", lambda ex=ec2_exchange: cancel_orders_menu(ex)))
+                # 交易功能 (撤单、市价卖出) - Bybit 撤单在稳定币交易里
+                if exchange_base != "bybit":
+                    options.append(("撤单", lambda ex=ec2_exchange: cancel_orders_menu(ex)))
                 options.append(("市价卖出", lambda ex=ec2_exchange: market_sell_menu(ex)))
 
                 # Binance 特有功能
@@ -104,7 +105,7 @@ def main():
 
                 # Bybit 特有功能
                 if exchange_base == "bybit":
-                    options.append(("资金费率", lambda: show_funding_rate("bybit")))
+                    options.append(("稳定币交易", lambda ex=ec2_exchange: do_stablecoin_trade(ex)))
 
                 # Aster 特有功能
                 if exchange_base == "aster":

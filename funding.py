@@ -695,7 +695,7 @@ def _get_lighter_position_funding_with_auth(account_index: int, api_secret: str,
     headers = {"Accept-Encoding": "gzip, deflate"}
     all_fundings = []
     cursor = None
-    max_pages = 20  # 防止无限循环
+    max_pages = 50  # 防止无限循环，50页 x 100条 = 5000条
 
     for _ in range(max_pages):
         params = {
