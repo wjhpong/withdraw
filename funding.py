@@ -733,6 +733,44 @@ def _get_lighter_position_funding_with_auth(account_index: int, api_secret: str,
     return type('Result', (), {'fundings': all_fundings})()
 
 
+def get_funding_income_lighter(user_id: str, days: int = 7):
+    """查询 Lighter 资金费收入汇总，返回 (total, None) 或 (None, error_str)"""
+    from utils import load_config
+
+    try:
+        config = load_config()
+        user_data = config.get("users", {}).get(user_id, {})
+        lighter_config = user_data.get("accounts", {}).get("lighter", {})
+        wallet_address = lighter_config.get("wallet_address")
+        api_secret = lighter_config.get("api_secret") or lighter_config.get("api_key")
+        key_index = int(lighter_config.get("key_index", 0))
+
+        if not wallet_address or not api_secret:
+            return None, "未配置 Lighter"
+
+        account_index = get_lighter_account_index(wallet_address)
+        if account_index is None:
+            return None, "无法获取账户"
+
+        result = _get_lighter_position_funding_with_auth(
+            account_index, api_secret, key_index, market_id=255, days=days
+        )
+        if not result or not hasattr(result, "fundings"):
+            return 0.0, None  # 无记录视为 0
+
+        now = datetime.now(ZoneInfo("Asia/Shanghai"))
+        cutoff_time = int((now - timedelta(days=days)).timestamp())
+        total = 0.0
+        for record in result.fundings:
+            ts = int(record.timestamp) if hasattr(record, "timestamp") else int(record.get("timestamp", 0))
+            if ts >= cutoff_time:
+                change = float(record.change) if hasattr(record, "change") else float(record.get("change", 0))
+                total += change
+        return total, None
+    except Exception as e:
+        return None, str(e)
+
+
 def show_lighter_funding_history(user: str = "eb65"):
     """显示 Lighter 历史资金费率和实际收入"""
     import json
@@ -780,7 +818,7 @@ def show_lighter_funding_history(user: str = "eb65"):
         user_data = config.get("users", {}).get(user, {})
         lighter_config = user_data.get("accounts", {}).get("lighter", {})
         wallet_address = lighter_config.get("wallet_address")
-        api_secret = lighter_config.get("api_secret")  # 私钥，用于签名
+        api_secret = lighter_config.get("api_secret") or lighter_config.get("api_key")  # 兼容两种写法
         key_index = lighter_config.get("key_index", 0)
 
         if wallet_address and api_secret:
@@ -1060,6 +1098,7 @@ def get_funding_income_hyperliquid(wallet_address: str, days: int = 7):
 def show_combined_funding_summary(user_id: str):
     """显示用户所有交易所的综合费率收益汇总"""
     import json
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     from utils import load_config, get_user_accounts, get_ec2_exchange_key, get_exchange_base
 
     config = load_config()
@@ -1074,25 +1113,19 @@ def show_combined_funding_summary(user_id: str):
     days_str = input("\n查询天数 (默认7天): ").strip()
     days = int(days_str) if days_str.isdigit() else 7
 
-    print(f"\n正在查询所有交易所的资金费收益...")
+    print(f"\n正在并行查询所有交易所的资金费收益...")
     print("=" * 70)
     print(f"  {user_name} - 综合费率收益汇总 (最近 {days} 天)")
     print("=" * 70)
 
-    results = []
-    grand_total = 0
-    currency_totals = {}  # 按币种汇总
-
-    for account_id, account_info in accounts.items():
+    # 定义查询任务
+    def query_exchange(account_id, account_info):
         exchange_type = account_info.get("exchange", account_id)
         exchange_base = get_exchange_base(exchange_type)
         exchange_name = exchange_type.upper()
-
         income = None
         error = None
         currency = "USDT"
-
-        print(f"\n  正在查询 {exchange_name}...", end=" ", flush=True)
 
         if exchange_base == "binance":
             ec2_key = get_ec2_exchange_key(user_id, account_id)
@@ -1108,32 +1141,46 @@ def show_combined_funding_summary(user_id: str):
             else:
                 error = "未配置钱包地址"
         elif exchange_base == "lighter":
-            # Lighter 的资金费直接计入持仓盈亏，无单独记录
-            error = "费用计入盈亏"
+            income, error = get_funding_income_lighter(user_id, days)
+            currency = "USDT"
         elif exchange_base in ("bybit", "bitget", "gate"):
-            # 这些交易所需要添加 API 支持
             error = "待开发"
         else:
             error = "不支持"
 
-        if income is not None:
-            print(f"{income:+,.2f} {currency}")
-            results.append({
-                "exchange": exchange_name,
-                "income": income,
-                "currency": currency,
-                "error": None
-            })
-            grand_total += income
-            currency_totals[currency] = currency_totals.get(currency, 0) + income
-        else:
-            print(f"跳过 ({error})")
-            results.append({
-                "exchange": exchange_name,
-                "income": None,
-                "currency": currency,
-                "error": error
-            })
+        return {
+            "exchange": exchange_name,
+            "income": income,
+            "currency": currency,
+            "error": error
+        }
+
+    # 并行查询
+    results = []
+    currency_totals = {}
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {
+            executor.submit(query_exchange, acc_id, acc_info): acc_info.get("exchange", acc_id).upper()
+            for acc_id, acc_info in accounts.items()
+        }
+
+        for future in as_completed(futures):
+            exchange_name = futures[future]
+            try:
+                result = future.result()
+                results.append(result)
+                if result["income"] is not None:
+                    print(f"  {result['exchange']}: {result['income']:+,.2f} {result['currency']}")
+                    currency_totals[result["currency"]] = currency_totals.get(result["currency"], 0) + result["income"]
+                else:
+                    print(f"  {result['exchange']}: 跳过 ({result['error']})")
+            except Exception as e:
+                print(f"  {exchange_name}: 错误 ({e})")
+                results.append({"exchange": exchange_name, "income": None, "currency": "USDT", "error": str(e)})
+
+    # 按交易所名称排序结果
+    results.sort(key=lambda x: x["exchange"])
 
     # 显示汇总结果
     print("\n" + "=" * 70)

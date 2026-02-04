@@ -24,7 +24,7 @@ def get_hyperliquid_config(user_id: str = "eb65"):
 
 
 def show_hyperliquid_balance(exchange: str = "hyperliquid"):
-    """查询 Hyperliquid 账户余额"""
+    """查询 Hyperliquid 账户余额和保证金率"""
     display_name = get_exchange_display_name(exchange)
     print(f"\n正在查询 {display_name} 余额...")
 
@@ -36,7 +36,7 @@ def show_hyperliquid_balance(exchange: str = "hyperliquid"):
         user_state = info.user_state(wallet_address)
 
         print("\n" + "=" * 50)
-        print("📊 Hyperliquid 账户余额:")
+        print("📊 Hyperliquid 账户概览:")
         print("=" * 50)
 
         # 显示保证金信息
@@ -44,49 +44,80 @@ def show_hyperliquid_balance(exchange: str = "hyperliquid"):
         account_value = float(margin_summary.get("accountValue", 0))
         total_margin_used = float(margin_summary.get("totalMarginUsed", 0))
         total_ntl_pos = float(margin_summary.get("totalNtlPos", 0))
+        withdrawable = float(user_state.get("withdrawable", 0))
 
         print(f"账户价值:     ${account_value:,.2f}")
+        print(f"可用余额:     ${withdrawable:,.2f}")
         print(f"已用保证金:   ${total_margin_used:,.2f}")
         print(f"持仓名义价值: ${total_ntl_pos:,.2f}")
 
-        # 计算可用余额
-        withdrawable = float(user_state.get("withdrawable", 0))
-        print(f"可提取余额:   ${withdrawable:,.2f}")
+        # 保证金率和风险等级
+        if total_margin_used > 0 and account_value > 0:
+            margin_ratio = (total_margin_used / account_value) * 100
+            print(f"保证金使用率: {margin_ratio:.2f}%", end="  ")
+            if margin_ratio < 30:
+                print("🟢 安全")
+            elif margin_ratio < 60:
+                print("🟡 中等")
+            elif margin_ratio < 80:
+                print("🟠 较高")
+            else:
+                print("🔴 危险")
 
-        # 显示持仓
+        # 显示持仓（带平仓价信息）
         positions = user_state.get("assetPositions", [])
-        if positions:
-            print("\n" + "-" * 50)
-            print("📈 当前持仓:")
-            print("-" * 50)
-            for pos in positions:
-                position = pos.get("position", {})
-                coin = position.get("coin", "")
-                szi = float(position.get("szi", 0))
-                if szi != 0:
-                    entry_px = float(position.get("entryPx", 0))
-                    unrealized_pnl = float(position.get("unrealizedPnl", 0))
-                    leverage = position.get("leverage", {})
-                    lev_type = leverage.get("type", "")
-                    lev_value = leverage.get("value", 0)
+        has_position = False
+        for pos in positions:
+            position = pos.get("position", {})
+            szi = float(position.get("szi", 0))
+            if szi != 0:
+                if not has_position:
+                    print("\n" + "-" * 50)
+                    print("📈 当前持仓:")
+                    print("-" * 50)
+                    all_mids = info.all_mids()
+                    has_position = True
 
-                    direction = "多" if szi > 0 else "空"
-                    print(f"{coin}: {direction} {abs(szi):.4f} @ {entry_px:.4f}")
-                    print(f"  杠杆: {lev_value}x ({lev_type}), 未实现盈亏: ${unrealized_pnl:,.2f}")
+                coin = position.get("coin", "")
+                entry_px = float(position.get("entryPx", 0))
+                liquidation_px = float(position.get("liquidationPx", 0)) if position.get("liquidationPx") else None
+                unrealized_pnl = float(position.get("unrealizedPnl", 0))
+                leverage = position.get("leverage", {})
+                lev_value = leverage.get("value", 0)
+                current_px = float(all_mids.get(coin, 0))
+
+                direction = "多" if szi > 0 else "空"
+                print(f"\n{coin} {direction} {abs(szi):.4f} | {lev_value}x")
+                print(f"  开仓: ${entry_px:,.4f}  当前: ${current_px:,.4f}  盈亏: ${unrealized_pnl:,.2f}")
+
+                if liquidation_px and liquidation_px > 0:
+                    if szi > 0:  # 多仓
+                        distance_pct = ((current_px - liquidation_px) / current_px) * 100
+                    else:  # 空仓
+                        distance_pct = ((liquidation_px - current_px) / current_px) * 100
+
+                    warning = ""
+                    if distance_pct < 5:
+                        warning = " ⚠️ 危险!"
+                    elif distance_pct < 10:
+                        warning = " ⚠️ 注意"
+                    print(f"  平仓价: ${liquidation_px:,.4f}  距平仓线: {distance_pct:.2f}%{warning}")
 
         # 查询现货余额
         spot_state = info.spot_user_state(wallet_address)
         balances = spot_state.get("balances", [])
-        if balances:
-            print("\n" + "-" * 50)
-            print("💰 现货余额:")
-            print("-" * 50)
-            for bal in balances:
+        has_spot = False
+        for bal in balances:
+            total = float(bal.get("total", 0))
+            if total > 0:
+                if not has_spot:
+                    print("\n" + "-" * 50)
+                    print("💰 现货余额:")
+                    print("-" * 50)
+                    has_spot = True
                 coin = bal.get("coin", "")
                 hold = float(bal.get("hold", 0))
-                total = float(bal.get("total", 0))
-                if total > 0:
-                    print(f"{coin}: {total:.6f} (锁定: {hold:.6f})")
+                print(f"{coin}: {total:.6f}" + (f" (锁定: {hold:.6f})" if hold > 0 else ""))
 
     except ValueError as e:
         print(f"❌ 配置错误: {e}")

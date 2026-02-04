@@ -10,7 +10,7 @@ from utils import (
 )
 from balance import show_balance, show_pm_ratio, show_gate_subaccounts
 from aster import show_aster_margin_ratio
-from hyperliquid_ops import show_hyperliquid_balance, show_hyperliquid_margin_ratio, do_hyperliquid_transfer
+from hyperliquid_ops import show_hyperliquid_balance, do_hyperliquid_transfer
 from lighter_ops import show_lighter_balance, show_lighter_margin_ratio
 from withdraw_ops import do_withdraw
 from transfer import do_transfer
@@ -68,7 +68,6 @@ def main():
             if exchange_base == "hyperliquid":
                 options.append(("查询余额", lambda: show_hyperliquid_balance()))
                 options.append(("账户划转", lambda: do_hyperliquid_transfer("hyperliquid")))
-                options.append(("保证金率", lambda: show_hyperliquid_margin_ratio()))
                 options.append(("历史费率", lambda u=user_id: show_hyperliquid_funding_history(u)))
             elif exchange_base == "lighter":
                 options.append(("查询余额", lambda: show_lighter_balance()))
