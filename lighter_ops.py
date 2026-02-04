@@ -9,7 +9,7 @@ from utils import load_config, get_exchange_display_name, input_amount, select_o
 LIGHTER_MAINNET_URL = "https://mainnet.zklighter.elliot.ai"
 
 
-def get_lighter_config(user_id: str = "eb65"):
+def get_lighter_config(user_id: str = "dennis"):
     """获取 Lighter 配置"""
     config = load_config()
     user = config.get("users", {}).get(user_id, {})

@@ -270,21 +270,37 @@ def select_user(allow_back: bool = True):
     return users[idx][0]
 
 
-def select_account(user_id: str, allow_back: bool = True):
-    """选择用户的交易所账号，返回 account_id 或 None"""
+def select_account(user_id: str, allow_back: bool = True, show_combined: bool = True):
+    """选择用户的交易所账号，返回 account_id 或 None
+
+    返回值:
+        account_id: 正常选择的账号ID
+        None: 返回上一级
+        "__combined__": 选择了综合收益选项
+    """
     accounts = get_user_accounts(user_id)
     if not accounts:
         print(f"\n该用户没有配置任何交易所账号")
         return None
 
-    if len(accounts) == 1:
-        # 只有一个账号，直接返回
+    if len(accounts) == 1 and not show_combined:
+        # 只有一个账号且不显示综合选项，直接返回
         return accounts[0][0]
 
     account_names = [name for _, name in accounts]
+
+    # 如果有多个账号，添加综合收益选项
+    if show_combined and len(accounts) > 1:
+        account_names.append("== 综合收益 ==")
+
     idx = select_option("请选择交易所:", account_names, allow_back=allow_back)
     if idx == -1:
         return None
+
+    # 检查是否选择了综合收益
+    if show_combined and len(accounts) > 1 and idx == len(accounts):
+        return "__combined__"
+
     return accounts[idx][0]
 
 

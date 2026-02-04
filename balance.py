@@ -83,27 +83,6 @@ def show_balance(exchange: str = None):
         if '正在查询' not in line:
             print(line)
     
-    # 对于 BYBIT，额外查询统一账户余额
-    if exchange_base == "bybit":
-        try:
-            # 尝试查询统一账户余额
-            unified_output = run_on_ec2(f"balance {exchange} UNIFIED")
-            # 移除 EC2 返回的 "正在查询..." 行
-            unified_lines = unified_output.strip().split('\n')
-            unified_printed = False
-            for line in unified_lines:
-                if '正在查询' not in line:
-                    if line.strip():  # 只打印非空行
-                        if not unified_printed:
-                            # 在统一账户余额前添加分隔线和标题
-                            print("\n" + "=" * 50)
-                            print("📊 统一账户余额 (UNIFIED):")
-                            print("=" * 50)
-                            unified_printed = True
-                        print(line)
-        except Exception:
-            # 如果查询统一账户失败，忽略错误（可能 EC2 上没有这个命令）
-            pass
 
 
 def show_pm_ratio(exchange: str = None):

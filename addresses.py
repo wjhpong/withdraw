@@ -131,8 +131,7 @@ def _add_address(addresses: list, default_exchange: str = None):
     # 自动检测地址类型
     addr_type = detect_address_type(address)
     type_names = {
-        "evm": "EVM (以太坊/BSC/ARB等)",
-        "trc": "TRC (波场)",
+        "evm": "EVM (0x地址，可能是 Sonic/Polygon 等)",
         "sol": "SOL (Solana)",
         "sui": "SUI",
         "apt": "APT (Aptos)",
@@ -141,8 +140,8 @@ def _add_address(addresses: list, default_exchange: str = None):
     }
     print(f"\n检测到地址类型: {type_names.get(addr_type, addr_type)}")
 
-    type_options = ["EVM (0x短地址)", "TRC (T地址)", "SOL (Solana)", "SUI", "APT (Aptos)", "其他"]
-    type_map = ["evm", "trc", "sol", "sui", "apt", "other"]
+    type_options = ["Sonic", "Polygon", "SOL (Solana)", "SUI", "APT (Aptos)", "其他"]
+    type_map = ["sonic", "polygon", "sol", "sui", "apt", "other"]
 
     if addr_type == "sui_apt":
         print("SUI 和 APT 地址格式相同，请选择:")

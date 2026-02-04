@@ -47,9 +47,8 @@ def do_withdraw(exchange: str = None):
             addr_options.append(f"[{a['name']}] {a.get('network', '')} - 仅{coins_str}")
         else:
             # 检查是否是circle或REAP地址，显示特殊标记
-            if a.get('name', '').lower() == 'circle':
-                addr_options.append(f"[{a['name']}] {a['address'][:25]}... - 仅USDC")
-            elif a.get('name', '').lower() == 'reap':
+            name_lower = a.get('name', '').lower()
+            if name_lower in ('circle', 'circle2', 'reap'):
                 addr_options.append(f"[{a['name']}] {a['address'][:25]}... - 仅USDC")
             else:
                 addr_options.append(f"[{a['name']}] {a['address'][:25]}...")
@@ -64,18 +63,13 @@ def do_withdraw(exchange: str = None):
         selected = None
 
     # 输入币种
-    # circle地址只能提现USDC，REAP地址只能提现USDC
+    # circle/circle2/reap 地址只能提现USDC
     if selected:
         addr_name_lower = selected.get('name', '').lower().strip()
-        # circle地址只能提现USDC，自动设置，不要求输入
-        if addr_name_lower == 'circle':
+        # 这些地址只能提现USDC，自动设置，不要求输入
+        if addr_name_lower in ('circle', 'circle2', 'reap'):
             coin = 'USDC'
-            print(f"\n⚠️  circle地址只能提现USDC，已自动选择USDC")
-            # 跳过币种输入，直接继续
-        elif addr_name_lower == 'reap':
-            # REAP地址只能提现USDC，自动设置，不要求输入
-            coin = 'USDC'
-            print(f"\n⚠️  REAP地址只能提现USDC，已自动选择USDC")
+            print(f"\n⚠️  {selected['name']}地址只能提现USDC，已自动选择USDC")
             # 跳过币种输入，直接继续
         elif selected.get('coins'):
             # 地址有币种限制，显示选择菜单
@@ -95,8 +89,8 @@ def do_withdraw(exchange: str = None):
         if not coin or coin == "0":
             return
     
-    # 如果选择了circle地址但币种不是USDC，提示错误
-    if selected and selected.get('name', '').lower() == 'circle' and coin.upper() != 'USDC':
+    # 如果选择了circle/circle2地址但币种不是USDC，提示错误
+    if selected and selected.get('name', '').lower() in ('circle', 'circle2') and coin.upper() != 'USDC':
         print(f"\n❌ 错误: circle地址只能提现USDC，不能提现{coin}")
         return
     
@@ -144,8 +138,22 @@ def do_withdraw(exchange: str = None):
         address = selected['address']
         addr_type = selected.get('type', 'evm')
         memo = selected.get('memo')
-        
-        if selected.get('network'):
+
+        # 根据地址类型直接映射到网络
+        type_to_network = {
+            'sonic': 'SONIC',
+            'polygon': 'MATIC',
+            'sol': 'SOL',
+            'sui': 'SUI',
+            'apt': 'APT',
+            'evm': None,  # 旧的 evm 类型需要选择网络
+            'trc': 'TRC20',
+        }
+
+        if addr_type in type_to_network and type_to_network[addr_type]:
+            network = type_to_network[addr_type]
+            print(f"\n自动选择网络: {network}")
+        elif selected.get('network'):
             network = selected['network']
             print(f"\n自动选择网络: {network}")
         else:

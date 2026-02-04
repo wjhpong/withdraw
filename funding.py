@@ -1015,3 +1015,148 @@ def show_funding_rate_menu():
             break
 
         input("\n按回车继续...")
+
+
+def get_funding_income_binance(exchange: str, days: int = 7):
+    """获取 Binance 资金费收入数据（不显示，仅返回数据）"""
+    import json
+    try:
+        output = run_on_ec2(f'binance_funding_income {exchange} "" {days}')
+        income_records = json.loads(output.strip())
+        if isinstance(income_records, dict) and "error" in income_records:
+            return None, income_records.get("error")
+        total = sum(float(r.get("income", 0)) for r in income_records)
+        return total, None
+    except Exception as e:
+        return None, str(e)
+
+
+def get_funding_income_aster(exchange: str, days: int = 7):
+    """获取 Aster 资金费收入数据（不显示，仅返回数据）"""
+    import json
+    try:
+        output = run_on_ec2(f'aster_funding_income {exchange} "" {days}')
+        income_records = json.loads(output.strip())
+        if isinstance(income_records, dict) and "error" in income_records:
+            return None, income_records.get("error")
+        total = sum(float(r.get("income", 0)) for r in income_records)
+        return total, None
+    except Exception as e:
+        return None, str(e)
+
+
+def get_funding_income_hyperliquid(wallet_address: str, days: int = 7):
+    """获取 Hyperliquid 资金费收入数据（不显示，仅返回数据）"""
+    try:
+        records = get_hyperliquid_user_funding(wallet_address, None, days)
+        if not records:
+            return 0.0, None
+        total = sum(float(r.get("delta", {}).get("usdc", 0)) for r in records)
+        return total, None
+    except Exception as e:
+        return None, str(e)
+
+
+def show_combined_funding_summary(user_id: str):
+    """显示用户所有交易所的综合费率收益汇总"""
+    import json
+    from utils import load_config, get_user_accounts, get_ec2_exchange_key, get_exchange_base
+
+    config = load_config()
+    user_data = config.get("users", {}).get(user_id, {})
+    user_name = user_data.get("name", user_id)
+    accounts = user_data.get("accounts", {})
+
+    if not accounts:
+        print(f"\n用户 {user_name} 没有配置任何交易所账号")
+        return
+
+    days_str = input("\n查询天数 (默认7天): ").strip()
+    days = int(days_str) if days_str.isdigit() else 7
+
+    print(f"\n正在查询所有交易所的资金费收益...")
+    print("=" * 70)
+    print(f"  {user_name} - 综合费率收益汇总 (最近 {days} 天)")
+    print("=" * 70)
+
+    results = []
+    grand_total = 0
+    currency_totals = {}  # 按币种汇总
+
+    for account_id, account_info in accounts.items():
+        exchange_type = account_info.get("exchange", account_id)
+        exchange_base = get_exchange_base(exchange_type)
+        exchange_name = exchange_type.upper()
+
+        income = None
+        error = None
+        currency = "USDT"
+
+        print(f"\n  正在查询 {exchange_name}...", end=" ", flush=True)
+
+        if exchange_base == "binance":
+            ec2_key = get_ec2_exchange_key(user_id, account_id)
+            income, error = get_funding_income_binance(ec2_key, days)
+        elif exchange_base == "aster":
+            ec2_key = get_ec2_exchange_key(user_id, account_id)
+            income, error = get_funding_income_aster(ec2_key, days)
+        elif exchange_base == "hyperliquid":
+            wallet_address = account_info.get("wallet_address")
+            if wallet_address:
+                income, error = get_funding_income_hyperliquid(wallet_address, days)
+                currency = "USDC"
+            else:
+                error = "未配置钱包地址"
+        elif exchange_base == "lighter":
+            # Lighter 的资金费直接计入持仓盈亏，无单独记录
+            error = "费用计入盈亏"
+        elif exchange_base in ("bybit", "bitget", "gate"):
+            # 这些交易所需要添加 API 支持
+            error = "待开发"
+        else:
+            error = "不支持"
+
+        if income is not None:
+            print(f"{income:+,.2f} {currency}")
+            results.append({
+                "exchange": exchange_name,
+                "income": income,
+                "currency": currency,
+                "error": None
+            })
+            grand_total += income
+            currency_totals[currency] = currency_totals.get(currency, 0) + income
+        else:
+            print(f"跳过 ({error})")
+            results.append({
+                "exchange": exchange_name,
+                "income": None,
+                "currency": currency,
+                "error": error
+            })
+
+    # 显示汇总结果
+    print("\n" + "=" * 70)
+    print(f"{'交易所':<15} {'收入':<20} {'状态':<15}")
+    print("-" * 70)
+
+    for r in results:
+        if r["income"] is not None:
+            income_str = f"{r['income']:+,.4f} {r['currency']}"
+            status = "OK"
+        else:
+            income_str = "-"
+            status = r["error"] or "失败"
+        print(f"{r['exchange']:<15} {income_str:<20} {status:<15}")
+
+    print("-" * 70)
+
+    # 按币种显示小计
+    for currency, total in currency_totals.items():
+        avg_daily = total / days if days > 0 else 0
+        print(f"\n{currency} 汇总:")
+        print(f"  总收入: {total:+,.4f} {currency}")
+        print(f"  日均收入: {avg_daily:+,.4f} {currency}")
+        print(f"  年化收入: {avg_daily * 365:+,.2f} {currency}")
+
+    print("=" * 70)

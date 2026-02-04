@@ -7,3 +7,16 @@ config.json
 
 # 个人地址簿
 addresses.json
+
+# 虚拟环境
+venv/
+
+# SSH 密钥
+*.pem
+
+# IDE
+.idea/
+.vscode/
+
+# Claude 本地设置
+.claude/settings.local.json

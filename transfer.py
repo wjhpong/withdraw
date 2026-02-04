@@ -274,10 +274,10 @@ def do_transfer(exchange: str = None):
         do_aster_transfer(exchange)
         return
     else:
-        # Bybit: 统一账户 ↔ 资金账户
+        # Bybit: 统一账户 ↔ 现货账户
         transfer_options = [
-            ("UNIFIED", "FUND", "统一账户 → 资金账户"),
-            ("FUND", "UNIFIED", "资金账户 → 统一账户"),
+            ("UNIFIED", "FUND", "统一账户 → 现货账户"),
+            ("FUND", "UNIFIED", "现货账户 → 统一账户"),
         ]
         option_names = [opt[2] for opt in transfer_options]
         transfer_idx = select_option("选择划转方向:", option_names, allow_back=True)
@@ -317,26 +317,26 @@ def do_transfer(exchange: str = None):
         return
     
     # 确认
-    print("\n" + "=" * 50)
-    print("请确认划转信息:")
-    print(f"  交易所: {display_name}")
-    print(f"  从: {from_type}")
-    print(f"  到: {to_type}")
-    print(f"  币种: {coin}")
-    print(f"  数量: {amount}")
-    print("=" * 50)
-    
-    if select_option("确认划转?", ["确认", "取消"]) != 0:
+    # 显示友好的账户名称
+    from_display = {"FUND": "现货账户", "UNIFIED": "统一账户", "SPOT": "现货账户", "PORTFOLIO_MARGIN": "统一账户"}.get(from_type, from_type)
+    to_display = {"FUND": "现货账户", "UNIFIED": "统一账户", "SPOT": "现货账户", "PORTFOLIO_MARGIN": "统一账户"}.get(to_type, to_type)
+
+    print(f"\n确认划转 {amount} {coin}: {from_display} → {to_display}")
+
+    if select_option("", ["确认", "取消"]) != 0:
         print("已取消")
         return
-    
-    print("\n正在划转...")
+
+    print("正在划转...")
     try:
         output = run_on_ec2(f"transfer {exchange} {from_type} {to_type} {coin} {amount}")
-        print(output)
-        if "error" in output.lower() or "失败" in output:
-            print("\n⚠️  划转可能失败，请检查交易所确认")
-        elif "success" in output.lower() or "成功" in output:
-            print("\n✅ 划转成功")
+        # 只显示关键结果
+        if "成功" in output or "✅" in output:
+            print("✅ 划转成功")
+        elif "失败" in output or "❌" in output or "error" in output.lower():
+            # 提取错误信息
+            for line in output.split('\n'):
+                if "失败" in line or "❌" in line or "error" in line.lower():
+                    print(line)
     except SSHError as e:
         print(f"❌ 划转失败: {e}")

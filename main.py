@@ -18,7 +18,7 @@ from earn import manage_earn
 from trade import do_stablecoin_trade, cancel_orders_menu, market_sell_menu, futures_close_menu
 from addresses import manage_addresses
 from bnb_tools import manage_bnb_tools
-from funding import show_funding_rate, show_binance_funding_history, show_aster_funding_history, show_hyperliquid_funding_history, show_lighter_funding_history
+from funding import show_funding_rate, show_binance_funding_history, show_aster_funding_history, show_hyperliquid_funding_history, show_lighter_funding_history, show_combined_funding_summary
 
 
 def main():
@@ -37,9 +37,15 @@ def main():
         user_name = config.get("users", {}).get(user_id, {}).get("name", user_id)
 
         # 2. 再选择交易所账号
-        account_id = select_account(user_id, allow_back=True)
+        account_id = select_account(user_id, allow_back=True, show_combined=True)
         if not account_id:
             continue  # 返回重新选用户
+
+        # 处理综合收益选项
+        if account_id == "__combined__":
+            show_combined_funding_summary(user_id)
+            input("\n按回车继续...")
+            continue
 
         # 获取 EC2 使用的交易所 key
         ec2_exchange = get_ec2_exchange_key(user_id, account_id)

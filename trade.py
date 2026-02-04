@@ -21,16 +21,19 @@ def do_stablecoin_trade(exchange: str = None):
     print("\n=== 稳定币交易 ===")
 
     if exchange:
-        if exchange.startswith("binance"):
+        if exchange.startswith("binance") or "_binance" in exchange:
             # Binance 支持多个稳定币交易对
             pair_idx = select_option("选择交易对:", [
+                "USDC/USDT",
                 "BFUSD/USDT",
                 "USD1/USDT",
                 "返回"
             ])
             if pair_idx == 0:
-                trade_bfusd_usdt(exchange)
+                trade_usdc_usdt_binance(exchange)
             elif pair_idx == 1:
+                trade_bfusd_usdt(exchange)
+            elif pair_idx == 2:
                 trade_usd1_usdt(exchange)
             return
         elif exchange.startswith("bybit"):
@@ -127,6 +130,81 @@ def trade_usdc_usdt(exchange: str):
 
         elif action == 1:
             price_str = input("请输入限价 (如 1.0002, 输入 0 返回): ").strip()
+            if not price_str or price_str == "0":
+                continue
+            try:
+                price = float(price_str)
+                if price <= 0:
+                    print("价格必须大于0")
+                    continue
+            except ValueError:
+                print("请输入有效的数字")
+                continue
+
+            if select_option(f"确认以 {price} 限价买入 {amount} USDC?", ["确认", "取消"]) == 0:
+                print("\n正在下单...")
+                try:
+                    output = run_on_ec2(f"buy_usdc {exchange} limit {amount} {price}")
+                    print(output)
+                    if "error" in output.lower() or "失败" in output:
+                        print("\n下单可能失败，请检查交易所确认")
+                except SSHError as e:
+                    print(f"下单失败: {e}")
+
+        input("\n按回车继续...")
+
+
+def trade_usdc_usdt_binance(exchange: str = None):
+    """Binance USDC/USDT 交易"""
+    if not exchange:
+        exchange = select_exchange(binance_only=True)
+        if not exchange:
+            return
+
+    display_name = get_exchange_display_name(exchange)
+    print(f"\n=== {display_name} USDC/USDT 交易 ===")
+
+    while True:
+        print("\n正在获取 USDC/USDT 深度...")
+        try:
+            output = run_on_ec2(f"orderbook {exchange} USDCUSDT")
+            print(output)
+        except SSHError as e:
+            print(f"获取深度失败: {e}")
+
+        print(f"正在查询 {display_name} 现货账户 USDT 余额...")
+        try:
+            output = run_on_ec2(f"account_balance {exchange} SPOT USDT")
+            balance = output.strip()
+            print(f"现货账户 USDT 余额: {balance}")
+        except SSHError as e:
+            print(f"查询余额失败: {e}")
+            balance = "未知"
+
+        action = select_option("选择操作:", ["市价买入 USDC", "限价买入 USDC", "刷新深度", "返回"])
+
+        if action == 3:
+            break
+        elif action == 2:
+            continue
+
+        amount = input_amount("请输入买入 USDC 数量:")
+        if amount is None:
+            continue
+
+        if action == 0:
+            if select_option(f"确认市价买入 {amount} USDC?", ["确认", "取消"]) == 0:
+                print("\n正在下单...")
+                try:
+                    output = run_on_ec2(f"buy_usdc {exchange} market {amount}")
+                    print(output)
+                    if "error" in output.lower() or "失败" in output:
+                        print("\n下单可能失败，请检查交易所确认")
+                except SSHError as e:
+                    print(f"下单失败: {e}")
+
+        elif action == 1:
+            price_str = input("请输入限价 (如 0.9998, 输入 0 返回): ").strip()
             if not price_str or price_str == "0":
                 continue
             try:
