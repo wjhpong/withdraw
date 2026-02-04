@@ -111,6 +111,12 @@ def get_ssh_config():
     return ssh_host, ssh_user, ssh_hostname, ssh_port, ssh_key
 
 
+def is_windows():
+    """检测是否为 Windows 系统"""
+    import platform
+    return platform.system() == "Windows"
+
+
 def get_control_socket_path():
     """获取 SSH ControlMaster socket 路径"""
     import os
@@ -119,8 +125,12 @@ def get_control_socket_path():
 
 
 def ensure_ssh_connection():
-    """确保 SSH ControlMaster 连接已建立"""
+    """确保 SSH ControlMaster 连接已建立（仅 Unix）"""
     import os
+
+    # Windows 不支持 ControlMaster，跳过
+    if is_windows():
+        return True
 
     ssh_host, ssh_user, ssh_hostname, ssh_port, ssh_key = get_ssh_config()
     socket_path = get_control_socket_path()
@@ -168,15 +178,16 @@ def ensure_ssh_connection():
 
 
 def run_on_ec2(cmd: str) -> str:
-    """在 EC2 上执行命令并返回结果（使用连接复用）"""
+    """在 EC2 上执行命令并返回结果"""
     ssh_host, ssh_user, ssh_hostname, ssh_port, ssh_key = get_ssh_config()
-    socket_path = get_control_socket_path()
 
-    # 确保连接存在
-    ensure_ssh_connection()
-
-    # 构建SSH命令（使用 ControlPath 复用连接）
-    ssh_cmd_parts = ["ssh", "-o", f"ControlPath={socket_path}"]
+    # Windows 不支持 ControlMaster，直接连接
+    if is_windows():
+        ssh_cmd_parts = ["ssh"]
+    else:
+        socket_path = get_control_socket_path()
+        ensure_ssh_connection()
+        ssh_cmd_parts = ["ssh", "-o", f"ControlPath={socket_path}"]
 
     # 如果配置了详细的SSH信息，使用完整SSH命令
     if ssh_hostname:
