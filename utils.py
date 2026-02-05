@@ -300,8 +300,8 @@ def select_account(user_id: str, allow_back: bool = True, show_combined: bool = 
 
     account_names = [name for _, name in accounts]
 
-    # 如果有多个账号，添加综合收益选项
-    if show_combined and len(accounts) > 1:
+    # 添加综合收益选项（单账号也显示，方便查看历史收益）
+    if show_combined:
         account_names.append("== 综合收益 ==")
 
     idx = select_option("请选择交易所:", account_names, allow_back=allow_back)
@@ -309,7 +309,7 @@ def select_account(user_id: str, allow_back: bool = True, show_combined: bool = 
         return None
 
     # 检查是否选择了综合收益
-    if show_combined and len(accounts) > 1 and idx == len(accounts):
+    if show_combined and idx == len(accounts):
         return "__combined__"
 
     return accounts[idx][0]
