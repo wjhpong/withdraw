@@ -128,12 +128,20 @@ def trade_usdc_usdt(exchange: str):
         try:
             funding_output = run_on_ec2(f"account_balance {exchange} FUND USDT")
             funding_balance = float(funding_output.strip())
-        except (SSHError, ValueError):
+        except SSHError as e:
+            print(f"⚠️ 查询资金账户失败: {e}")
+            funding_balance = 0.0
+        except ValueError:
+            print(f"⚠️ 资金账户返回异常: {funding_output}")
             funding_balance = 0.0
         try:
             unified_output = run_on_ec2(f"account_balance {exchange} UNIFIED USDT")
             unified_balance = float(unified_output.strip())
-        except (SSHError, ValueError):
+        except SSHError as e:
+            print(f"⚠️ 查询统一账户失败: {e}")
+            unified_balance = 0.0
+        except ValueError:
+            print(f"⚠️ 统一账户返回异常: {unified_output}")
             unified_balance = 0.0
         print(f"💰 资金账户 USDT: {funding_balance:.4f}")
         print(f"💰 统一账户 USDT: {unified_balance:.4f}")
