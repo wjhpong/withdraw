@@ -14,7 +14,7 @@ VIP_LOAN_CONFIG = {
         "collateral_coins": ["BTC"],  # 固定 BTC
         "ec2_key": "binance"
     },
-    "柏青": {
+    "baiqing": {
         "account_id": "396833626",
         "collateral_coins": ["BTC", "ETH"],  # 固定 BTC,ETH
         "ec2_key": "binance3"
@@ -52,8 +52,23 @@ def show_vip_loan_orders(user_id: str, ec2_exchange: str):
             print("\n当前没有进行中的借贷订单")
             return
 
+        # 查询各币种的实时利率
+        loan_coins = list(set(order.get("loanCoin", "") for order in rows))
+        rate_map = {}  # coin -> yearly rate
+        try:
+            coins_str = ",".join(loan_coins)
+            rate_output = run_on_ec2(f"vip_loan_rates {ec2_exchange} {coins_str}")
+            rate_data = json.loads(rate_output.strip())
+            if isinstance(rate_data, list):
+                for item in rate_data:
+                    coin = item.get("asset", "")
+                    yearly = float(item.get("flexibleYearlyInterestRate", 0))
+                    rate_map[coin] = yearly
+        except:
+            pass  # 利率查询失败不影响订单显示
+
         print("\n" + "=" * 100)
-        print(f"{'订单ID':<15} {'借贷币种':<10} {'总负债':<18} {'利率':<14} {'LTV':<10} {'到期时间'}")
+        print(f"{'订单ID':<15} {'借贷币种':<10} {'总负债':<18} {'年利率':<14} {'LTV':<10} {'到期时间'}")
         print("-" * 100)
 
         for order in rows:
@@ -61,13 +76,16 @@ def show_vip_loan_orders(user_id: str, ec2_exchange: str):
             loan_coin = order.get("loanCoin", "")
             total_debt = float(order.get("totalDebt", 0))
 
-            # 利率可能是数字或字符串 "Flexible Rate"
-            loan_rate_raw = order.get("loanRate", 0)
-            try:
-                loan_rate = float(loan_rate_raw) * 100  # 转换为百分比
-                loan_rate_str = f"{loan_rate:.4f}%"
-            except (ValueError, TypeError):
-                loan_rate_str = str(loan_rate_raw)  # 显示原始字符串如 "Flexible Rate"
+            # 优先使用实时查询的利率，否则用订单中的利率
+            if loan_coin in rate_map:
+                loan_rate_str = f"{rate_map[loan_coin] * 100:.2f}%"
+            else:
+                loan_rate_raw = order.get("loanRate", 0)
+                try:
+                    loan_rate = float(loan_rate_raw) * 100
+                    loan_rate_str = f"{loan_rate:.2f}%"
+                except (ValueError, TypeError):
+                    loan_rate_str = str(loan_rate_raw)
 
             current_ltv = float(order.get("currentLTV", 0)) * 100
             expiration = order.get("expirationTime", "")
