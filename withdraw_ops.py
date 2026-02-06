@@ -47,6 +47,9 @@ def do_withdraw(exchange: str = None, user_id: str = None):
             if exchange in a['accounts']:
                 available_addresses.append(a)
 
+    # eb65 的 Bybit 只能提现到 Circle 地址
+    is_eb65_bybit = user_id == "eb65" and exchange_base == "bybit"
+
     # 选择地址
     selected = None
     addr_options = []
@@ -59,9 +62,14 @@ def do_withdraw(exchange: str = None, user_id: str = None):
             name_lower = a.get('name', '').lower()
             if name_lower in ('circle', 'circle2', 'reap'):
                 addr_options.append(f"[{a['name']}] {a['address'][:25]}... - 仅USDC")
+            elif 'sonic' in name_lower and 'circle' in name_lower:
+                addr_options.append(f"[{a['name']}] SONIC - 仅USDC")
             else:
                 addr_options.append(f"[{a['name']}] {a['address'][:25]}...")
-    addr_options.append("输入新地址")
+
+    # eb65 的 Bybit 不允许输入新地址
+    if not is_eb65_bybit:
+        addr_options.append("输入新地址")
     
     addr_idx = select_option("请选择提现地址:", addr_options, allow_back=True)
     if addr_idx == -1:
@@ -72,11 +80,12 @@ def do_withdraw(exchange: str = None, user_id: str = None):
         selected = None
 
     # 输入币种
-    # circle/circle2/reap 地址只能提现USDC
+    # circle/circle2/reap/sonic-circle 地址只能提现USDC
     if selected:
         addr_name_lower = selected.get('name', '').lower().strip()
         # 这些地址只能提现USDC，自动设置，不要求输入
-        if addr_name_lower in ('circle', 'circle2', 'reap'):
+        is_circle_addr = addr_name_lower in ('circle', 'circle2', 'reap') or 'circle' in addr_name_lower
+        if is_circle_addr:
             coin = 'USDC'
             print(f"\n⚠️  {selected['name']}地址只能提现USDC，已自动选择USDC")
             # 跳过币种输入，直接继续
@@ -141,14 +150,28 @@ def do_withdraw(exchange: str = None, user_id: str = None):
         print(f"💰 {coin} 现货账户: {fmt_bal(spot_bal)}")
 
     # 处理地址和网络
-    # REAP地址强制使用Polygon网络，优先处理，不进入任何网络选择逻辑
+    # 特殊地址强制使用固定网络
     is_reap_address = selected and selected.get('name', '').lower() == 'reap'
-    
+    is_sonic_circle = selected and 'sonic' in selected.get('name', '').lower() and 'circle' in selected.get('name', '').lower()
+    is_circle_apt = selected and selected.get('name', '').lower() == 'circle' and selected.get('type') == 'apt'
+
     if is_reap_address:
         network = "MATIC"
         print(f"\n⚠️  REAP地址只能使用Polygon网络，已自动选择MATIC")
-        
+
         # 获取地址和memo
+        address = selected['address']
+        memo = selected.get('memo')
+    elif is_sonic_circle:
+        # sonic-circle 地址强制使用 SONIC 网络
+        network = "SONIC"
+        print(f"\n⚠️  {selected['name']}地址使用Sonic网络，已自动选择SONIC")
+        address = selected['address']
+        memo = selected.get('memo')
+    elif is_circle_apt:
+        # circle APT 地址强制使用 APT 网络
+        network = "APT"
+        print(f"\n⚠️  {selected['name']}地址使用Aptos网络，已自动选择APT")
         address = selected['address']
         memo = selected.get('memo')
     elif selected:
