@@ -257,10 +257,13 @@ def do_vip_loan_repay(user_id: str, ec2_exchange: str):
         repay_type_idx = select_option("选择还款方式:", [
             f"全部还款 ({total_debt:,.4f} {loan_coin})",
             f"仅还利息 ({residual_interest:,.6f} {loan_coin})",
-            "自定义金额"
+            "自定义金额",
+            "返回"
         ])
 
-        if repay_type_idx == 0:
+        if repay_type_idx == 3:  # 返回
+            return
+        elif repay_type_idx == 0:
             repay_amount = total_debt
         elif repay_type_idx == 1:
             repay_amount = residual_interest
