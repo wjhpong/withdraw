@@ -211,18 +211,19 @@ def do_vip_loan_repay(user_id: str, ec2_exchange: str):
         total_debt = float(selected_order.get("totalDebt", 0))
         residual_interest = float(selected_order.get("residualInterest", 0))
 
-        # 查询可用余额
+        # 查询可用余额（从文本输出解析）
         available_balance = 0.0
         try:
             balance_output = run_on_ec2(f"balance {ec2_exchange}")
-            balance_result = json.loads(balance_output.strip())
-            # 从现货余额中查找对应币种
-            if isinstance(balance_result, dict):
-                spot_balances = balance_result.get("spot", [])
-                for bal in spot_balances:
-                    if bal.get("asset") == loan_coin:
-                        available_balance = float(bal.get("free", 0))
-                        break
+            # 解析文本格式的余额输出
+            # 格式: "USDT		31614.98173536"
+            import re
+            for line in balance_output.split('\n'):
+                # 匹配 "币种\t\t数量" 格式
+                match = re.match(rf'^{loan_coin}\s+(\d+\.?\d*)', line)
+                if match:
+                    available_balance = float(match.group(1))
+                    break
         except:
             pass  # 查询失败不影响还款流程
 
