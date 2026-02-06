@@ -19,6 +19,7 @@ from trade import do_stablecoin_trade, cancel_orders_menu, market_sell_menu, fut
 from addresses import manage_addresses
 from bnb_tools import manage_bnb_tools
 from funding import show_funding_rate, show_binance_funding_history, show_aster_funding_history, show_hyperliquid_funding_history, show_lighter_funding_history, show_combined_funding_summary
+from vip_loan import manage_vip_loan, get_vip_loan_config
 
 
 def main():
@@ -100,6 +101,9 @@ def main():
                     options.append(("BNB工具", lambda ex=ec2_exchange: manage_bnb_tools(ex)))
                     options.append(("统一保证金率", lambda ex=ec2_exchange: show_pm_ratio(ex)))
                     options.append(("历史费率", lambda ex=ec2_exchange: show_binance_funding_history(ex)))
+                    # VIP 借贷 (仅 dennis 和 柏青)
+                    if get_vip_loan_config(user_id):
+                        options.append(("VIP借贷", lambda u=user_id, ex=ec2_exchange: manage_vip_loan(u, ex)))
 
                 # Gate 特有功能
                 if exchange_base == "gate":
