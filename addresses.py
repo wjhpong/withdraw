@@ -204,12 +204,13 @@ def _add_address(addresses: list, default_exchange: str = None, user_id: str = N
         "SOL (Solana)",
         "TRX (TRC20)",
         "AVAX (Avalanche C-Chain)",
+        "ATOM (Cosmos)",
         "SUI",
         "APT (Aptos)",
         "Sonic",
         "其他"
     ]
-    type_map = ["eth", "bsc", "arb", "op", "matic", "sol", "trx", "avax", "sui", "apt", "sonic", "other"]
+    type_map = ["eth", "bsc", "arb", "op", "matic", "sol", "trx", "avax", "atom", "sui", "apt", "sonic", "other"]
 
     if addr_type == "sui_apt":
         print("SUI 和 APT 地址格式相同，请选择:")
