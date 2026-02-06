@@ -80,7 +80,7 @@ def main():
 
                 # Aster 和 Gate 不支持提现，Frances/Vanie/李天一 禁用提现
                 if exchange_base not in ("aster", "gate") and user_id not in ("frances", "vanie", "litianyi"):
-                    options.append(("提现", lambda ex=ec2_exchange: do_withdraw(ex)))
+                    options.append(("提现", lambda ex=ec2_exchange, u=user_id: do_withdraw(ex, u)))
 
                 # 账户划转 (Gate 不支持)
                 if exchange_base != "gate":

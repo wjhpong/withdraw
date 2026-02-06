@@ -3,7 +3,7 @@
 
 import time
 from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name, input_amount, get_networks_for_type, get_networks_for_coin, detect_address_type, SSHError
-from addresses import load_addresses
+from addresses import load_addresses, load_user_addresses
 from balance import get_coin_balance
 
 
@@ -12,9 +12,18 @@ class WithdrawError(Exception):
     pass
 
 
-def do_withdraw(exchange: str = None):
-    """执行提现"""
-    addresses = load_addresses()
+def do_withdraw(exchange: str = None, user_id: str = None):
+    """执行提现
+
+    Args:
+        exchange: 交易所 key
+        user_id: 用户 ID，如果指定则使用用户专属地址簿
+    """
+    # 加载用户地址簿或全局地址簿
+    if user_id:
+        addresses = load_user_addresses(user_id)
+    else:
+        addresses = load_addresses()
     
     # 选择交易所
     if not exchange:
