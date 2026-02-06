@@ -72,7 +72,7 @@ def show_balance(exchange: str = None):
 
     display_name = get_exchange_display_name(exchange)
     exchange_base = get_exchange_base(exchange)
-    
+
     print(f"\n正在查询 {display_name} 余额...")
 
     # EC2 上的 balance 命令已经格式化好输出，直接显示
@@ -83,6 +83,26 @@ def show_balance(exchange: str = None):
     for line in lines:
         if '正在查询' not in line:
             print(line)
+
+    # Bybit 额外查询统一账户
+    if exchange_base == "bybit":
+        print("\n" + "=" * 50)
+        print("📦 统一账户余额 (UNIFIED):")
+        print("=" * 50)
+        # 查询常用币种的统一账户余额
+        unified_coins = ["USDT", "USDC", "BTC", "ETH"]
+        has_balance = False
+        for coin in unified_coins:
+            try:
+                bal_output = run_on_ec2(f"account_balance {exchange} UNIFIED {coin}")
+                bal = float(bal_output.strip())
+                if bal > 0:
+                    has_balance = True
+                    print(f"  {coin}: {bal:.4f}")
+            except (SSHError, ValueError):
+                pass
+        if not has_balance:
+            print("  统一账户暂无余额")
     
 
 
