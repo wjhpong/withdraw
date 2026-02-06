@@ -110,47 +110,36 @@ def do_vip_loan_borrow(user_id: str, ec2_exchange: str):
     print(f"\n===== VIP 借贷 - 借款 =====")
     print(f"账户 ID: {account_id}")
 
-    # 收集多个借贷请求
+    # 收集借贷请求
     borrow_requests = []
 
+    print("\n请输入借贷信息，格式: 币种 金额")
+    print("例如: USDT 20000")
+    print("可以输入多行，每行一个币种，输入空行结束\n")
+
     while True:
-        print(f"\n当前借款列表: {len(borrow_requests)} 笔")
-        for i, req in enumerate(borrow_requests, 1):
-            print(f"  {i}. {req['coin']}: {req['amount']:,.4f}")
+        line = input("借贷 (币种 金额): ").strip()
+        if not line:
+            break
 
-        # 选择操作
-        if borrow_requests:
-            action_idx = select_option("选择操作:", ["添加币种", "确认借款", "清空重选", "返回"])
-            if action_idx == 1:  # 确认借款
-                break
-            elif action_idx == 2:  # 清空重选
-                borrow_requests = []
-                continue
-            elif action_idx == 3:  # 返回
-                return
-        else:
-            action_idx = select_option("选择操作:", ["添加币种", "返回"])
-            if action_idx == 1:  # 返回
-                return
-
-        # 添加币种
-        print("\n请输入借贷币种 (如 USDT, USDC, BTC, ETH 等):")
-        loan_coin = input("币种: ").strip().upper()
-        if not loan_coin:
+        # 解析输入：支持空格、逗号、冒号分隔
+        import re
+        parts = re.split(r'[\s,，:：]+', line)
+        if len(parts) < 2:
+            print("  格式错误，请输入: 币种 金额")
             continue
 
-        # 输入借贷金额
-        amount_str = input(f"借贷金额 ({loan_coin}): ").strip()
+        coin = parts[0].upper()
         try:
-            loan_amount = float(amount_str)
-            if loan_amount <= 0:
-                print("金额必须大于 0")
+            amount = float(parts[1])
+            if amount <= 0:
+                print("  金额必须大于 0")
                 continue
+            borrow_requests.append({"coin": coin, "amount": amount})
+            print(f"  已添加: {coin} {amount:,.4f}")
         except ValueError:
-            print("无效的金额")
+            print("  无效的金额")
             continue
-
-        borrow_requests.append({"coin": loan_coin, "amount": loan_amount})
 
     if not borrow_requests:
         print("没有添加任何借款")
