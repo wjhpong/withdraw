@@ -120,7 +120,7 @@ def main():
 
                 # 地址管理 (Aster 不需要，Frances/Vanie/李天一 禁用)
                 if exchange_base != "aster" and user_id not in ("frances", "vanie", "litianyi"):
-                    options.append(("管理地址簿", lambda ex=ec2_exchange: manage_addresses(ex)))
+                    options.append(("管理地址簿", lambda ex=ec2_exchange, u=user_id: manage_addresses(ex, u)))
 
             # 导航选项
             options.append(("切换用户/交易所", None))

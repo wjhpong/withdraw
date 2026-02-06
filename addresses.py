@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""地址簿管理"""
+"""地址簿管理 - 支持按用户分类"""
 
 import json
 import os
@@ -11,53 +11,106 @@ class AddressError(Exception):
     pass
 
 
-def load_addresses() -> list:
-    """加载地址簿"""
+def load_addresses_data() -> dict:
+    """加载完整地址簿数据"""
     if not os.path.exists(ADDRESSES_FILE):
-        return []
+        return {"addresses": [], "user_addresses": {}}
 
     try:
         with open(ADDRESSES_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             if not isinstance(data, dict):
                 print(f"⚠️  地址簿格式错误，应为 JSON 对象")
-                return []
-            return data.get("addresses", [])
+                return {"addresses": [], "user_addresses": {}}
+            # 兼容旧格式
+            if "user_addresses" not in data:
+                data["user_addresses"] = {}
+            return data
     except json.JSONDecodeError as e:
         print(f"❌ 地址簿 JSON 格式错误: {e}")
-        return []
+        return {"addresses": [], "user_addresses": {}}
     except IOError as e:
         print(f"❌ 读取地址簿失败: {e}")
-        return []
+        return {"addresses": [], "user_addresses": {}}
 
 
-def save_addresses(addresses: list):
-    """保存地址簿"""
+def load_addresses() -> list:
+    """加载地址簿（兼容旧代码）"""
+    return load_addresses_data().get("addresses", [])
+
+
+def load_user_addresses(user_id: str) -> list:
+    """加载用户的地址簿"""
+    data = load_addresses_data()
+    return data.get("user_addresses", {}).get(user_id, [])
+
+
+def save_addresses_data(data: dict):
+    """保存完整地址簿数据"""
     try:
         with open(ADDRESSES_FILE, "w", encoding="utf-8") as f:
-            json.dump({"addresses": addresses}, f, ensure_ascii=False, indent=2)
+            json.dump(data, f, ensure_ascii=False, indent=2)
     except IOError as e:
         print(f"❌ 保存地址簿失败: {e}")
         raise AddressError(f"保存失败: {e}")
 
 
-def manage_addresses(exchange: str = None):
-    """管理地址簿"""
+def save_addresses(addresses: list):
+    """保存地址簿（兼容旧代码）"""
+    data = load_addresses_data()
+    data["addresses"] = addresses
+    save_addresses_data(data)
+
+
+def save_user_addresses(user_id: str, addresses: list):
+    """保存用户的地址簿"""
+    data = load_addresses_data()
+    if "user_addresses" not in data:
+        data["user_addresses"] = {}
+    data["user_addresses"][user_id] = addresses
+    save_addresses_data(data)
+
+
+def manage_addresses(exchange: str = None, user_id: str = None):
+    """管理地址簿
+
+    Args:
+        exchange: 交易所 key
+        user_id: 用户 ID，如果指定则使用用户专属地址簿
+    """
+    from utils import load_config
+
     # 获取当前交易所类型
     exchange_base = get_exchange_base(exchange) if exchange else None
-    
+
+    # 获取用户名用于显示
+    user_name = None
+    if user_id:
+        config = load_config()
+        user_name = config.get("users", {}).get(user_id, {}).get("name", user_id)
+
     while True:
-        addresses = load_addresses()
-        
+        # 加载用户地址簿或全局地址簿
+        if user_id:
+            addresses = load_user_addresses(user_id)
+        else:
+            addresses = load_addresses()
+
         # 过滤当前交易所的地址
         if exchange_base:
             filtered = [a for a in addresses if a.get('exchange') == exchange_base]
             exchange_name = dict(EXCHANGES).get(exchange, exchange.upper())
-            title = f"📋 {exchange_name} 地址簿"
+            if user_name:
+                title = f"📋 {user_name} - {exchange_name} 地址簿"
+            else:
+                title = f"📋 {exchange_name} 地址簿"
         else:
             filtered = addresses
-            title = "📋 所有地址"
-        
+            if user_name:
+                title = f"📋 {user_name} 的地址簿"
+            else:
+                title = "📋 所有地址"
+
         print("\n" + "=" * 50)
         print(title)
         print("=" * 50)
@@ -75,23 +128,23 @@ def manage_addresses(exchange: str = None):
                 print(f"  {i}. [{addr['name']}] ({addr_type}) {addr['address'][:25]}...{coin_restriction}{memo_str}")
         else:
             if exchange_base:
-                print(f"  (暂无 {exchange_name} 的保存地址)")
+                print(f"  (暂无保存地址)")
             else:
                 print("  (暂无保存的地址)")
-        
-        action = select_option("请选择操作:", ["添加新地址", "删除地址", "查看所有交易所地址", "返回"])
-        
+
+        action = select_option("请选择操作:", ["添加新地址", "删除地址", "查看所有地址", "返回"])
+
         if action == 0:  # 添加新地址
-            _add_address(addresses, exchange_base)
+            _add_address(addresses, exchange_base, user_id)
         elif action == 1:  # 删除地址
-            _delete_address(addresses, filtered)
+            _delete_address(addresses, filtered, user_id)
         elif action == 2:  # 查看所有
-            _show_all_addresses(addresses)
+            _show_all_addresses(addresses, user_name)
         else:
             break
 
 
-def _add_address(addresses: list, default_exchange: str = None):
+def _add_address(addresses: list, default_exchange: str = None, user_id: str = None):
     """添加新地址"""
     # 选择交易所
     print("\n选择地址绑定的交易所:")
@@ -163,7 +216,10 @@ def _add_address(addresses: list, default_exchange: str = None):
     })
 
     try:
-        save_addresses(addresses)
+        if user_id:
+            save_user_addresses(user_id, addresses)
+        else:
+            save_addresses(addresses)
         print(f"\n✅ 地址 [{name}] 已保存到 {exchange_names.get(selected_exchange, selected_exchange)}!")
     except AddressError:
         # 回滚添加
@@ -171,7 +227,7 @@ def _add_address(addresses: list, default_exchange: str = None):
         print("   地址未添加")
 
 
-def _delete_address(addresses: list, filtered: list):
+def _delete_address(addresses: list, filtered: list, user_id: str = None):
     """删除地址"""
     if not filtered:
         print("\n没有可删除的地址")
@@ -188,7 +244,10 @@ def _delete_address(addresses: list, filtered: list):
             if a['name'] == to_delete['name'] and a['address'] == to_delete['address']:
                 deleted = addresses.pop(i)
                 try:
-                    save_addresses(addresses)
+                    if user_id:
+                        save_user_addresses(user_id, addresses)
+                    else:
+                        save_addresses(addresses)
                     print(f"\n✅ 地址 [{deleted['name']}] 已删除!")
                 except AddressError:
                     # 回滚删除
@@ -197,12 +256,15 @@ def _delete_address(addresses: list, filtered: list):
                 break
 
 
-def _show_all_addresses(addresses: list):
+def _show_all_addresses(addresses: list, user_name: str = None):
     """显示所有交易所的地址"""
-    exchange_names = {"binance": "Binance", "bybit": "Bybit", "gate": "Gate.io"}
-    
+    exchange_names = {"binance": "Binance", "bybit": "Bybit", "gate": "Gate.io", "bitget": "Bitget"}
+
     print("\n" + "=" * 50)
-    print("📋 所有交易所地址")
+    if user_name:
+        print(f"📋 {user_name} 的所有地址")
+    else:
+        print("📋 所有交易所地址")
     print("=" * 50)
     
     # 按交易所分组
