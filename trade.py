@@ -2,6 +2,8 @@
 """交易功能 - 稳定币交易、撤单、市价卖出、永续平仓"""
 
 import json
+import requests
+from decimal import Decimal, ROUND_DOWN
 from utils import (
     run_on_ec2, select_option, input_amount, select_exchange,
     get_exchange_display_name, get_exchange_base, SSHError
@@ -12,6 +14,53 @@ from balance import get_coin_price
 STABLECOINS = ['USDT', 'USDC', 'USD1', 'BUSD', 'TUSD', 'FDUSD', 'DAI', 'USDD']
 # 最小显示价值
 MIN_DISPLAY_VALUE = 10
+
+# 缓存交易对信息
+_symbol_info_cache = {}
+
+
+def get_binance_lot_size(symbol: str) -> dict:
+    """获取 Binance 交易对的 LOT_SIZE 信息"""
+    if symbol in _symbol_info_cache:
+        return _symbol_info_cache[symbol]
+
+    try:
+        url = f"https://api.binance.com/api/v3/exchangeInfo?symbol={symbol}"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            for s in data.get("symbols", []):
+                if s.get("symbol") == symbol:
+                    for f in s.get("filters", []):
+                        if f.get("filterType") == "LOT_SIZE":
+                            info = {
+                                "stepSize": f.get("stepSize", "1"),
+                                "minQty": f.get("minQty", "0"),
+                                "maxQty": f.get("maxQty", "99999999")
+                            }
+                            _symbol_info_cache[symbol] = info
+                            return info
+    except Exception:
+        pass
+    return None
+
+
+def adjust_quantity_for_lot_size(qty: float, symbol: str, exchange_base: str) -> float:
+    """根据 LOT_SIZE 调整数量"""
+    if exchange_base != "binance":
+        return qty
+
+    lot_info = get_binance_lot_size(symbol)
+    if not lot_info:
+        return qty
+
+    step_size = Decimal(lot_info["stepSize"])
+    qty_decimal = Decimal(str(qty))
+
+    # 向下取整到 stepSize 的倍数
+    adjusted = (qty_decimal // step_size) * step_size
+
+    return float(adjusted)
 
 
 # ===================== 稳定币交易 =====================
@@ -1055,6 +1104,16 @@ def market_sell_menu(exchange: str):
             qty = input_amount("请输入卖出数量:")
             if qty is None:
                 continue
+
+        # 根据 LOT_SIZE 调整数量
+        adjusted_qty = adjust_quantity_for_lot_size(qty, symbol, exchange_base)
+        if adjusted_qty != qty:
+            print(f"\n注意: 根据交易规则，数量已调整为 {adjusted_qty}")
+            qty = adjusted_qty
+
+        if qty <= 0:
+            print("调整后数量为 0，无法卖出")
+            continue
 
         print("\n" + "=" * 50)
         print("请确认市价卖出:")
