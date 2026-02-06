@@ -194,31 +194,30 @@ def _add_address(addresses: list, default_exchange: str = None, user_id: str = N
     }
     print(f"\n检测到地址类型: {type_names.get(addr_type, addr_type)}")
 
-    # Binance 支持的常用网络
-    type_options = [
-        "ETH (ERC20)",
-        "BSC (BEP20)",
-        "ARB (Arbitrum)",
-        "OP (Optimism)",
-        "MATIC (Polygon)",
-        "SOL (Solana)",
-        "TRX (TRC20)",
-        "AVAX (Avalanche C-Chain)",
-        "ATOM (Cosmos)",
-        "SUI",
-        "APT (Aptos)",
-        "Sonic",
-        "其他"
-    ]
-    type_map = ["eth", "bsc", "arb", "op", "matic", "sol", "trx", "avax", "atom", "sui", "apt", "sonic", "other"]
-
-    if addr_type == "sui_apt":
+    # 地址类型选项（非 EVM 地址需要选择具体类型）
+    # EVM 地址（0x 开头 40 字符）提现时再选择具体链
+    if addr_type == "evm":
+        print("EVM 地址可在多条链上使用，提现时再选择具体网络")
+        # 保持 evm 类型，不需要选择
+    elif addr_type == "sui_apt":
         print("SUI 和 APT 地址格式相同，请选择:")
         confirm_type = select_option("选择地址类型:", ["SUI", "APT (Aptos)"])
         addr_type = "sui" if confirm_type == 0 else "apt"
     else:
-        confirm_type = select_option("选择网络:", type_options)
-        addr_type = type_map[confirm_type]
+        # 非 EVM 地址需要选择具体类型
+        non_evm_options = [
+            "SOL (Solana)",
+            "TRX (TRC20)",
+            "ATOM (Cosmos)",
+            "SUI",
+            "APT (Aptos)",
+            "Sonic",
+            "其他"
+        ]
+        non_evm_map = ["sol", "trx", "atom", "sui", "apt", "sonic", "other"]
+
+        confirm_type = select_option("选择网络:", non_evm_options)
+        addr_type = non_evm_map[confirm_type]
 
     memo = input("请输入 Memo/Tag (没有直接回车跳过): ").strip() or None
 

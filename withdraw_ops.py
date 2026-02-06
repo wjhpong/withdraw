@@ -154,11 +154,22 @@ def do_withdraw(exchange: str = None):
             'sol': 'SOL',
             'sui': 'SUI',
             'apt': 'APT',
-            'evm': None,  # 旧的 evm 类型需要选择网络
             'trc': 'TRC20',
+            'atom': 'ATOM',
         }
 
-        if addr_type in type_to_network and type_to_network[addr_type]:
+        # EVM 地址需要选择具体网络
+        # 包括: evm, eth, bsc, arb, op, matic, avax 等旧类型
+        evm_types = ['evm', 'eth', 'bsc', 'arb', 'op', 'matic', 'avax', 'other']
+
+        if addr_type in evm_types:
+            # EVM 兼容地址，让用户选择网络
+            evm_networks = ["ERC20", "BSC", "ARBITRUM", "OPTIMISM", "MATIC", "AVAXC", "BASE", "LINEA", "MANTLE", "SONIC"]
+            net_idx = select_option("请选择提现网络:", evm_networks, allow_back=True)
+            if net_idx == -1:
+                return
+            network = evm_networks[net_idx]
+        elif addr_type in type_to_network:
             network = type_to_network[addr_type]
             print(f"\n自动选择网络: {network}")
         elif selected.get('network'):
