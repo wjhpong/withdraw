@@ -98,7 +98,7 @@ def show_vip_loan_orders(user_id: str, ec2_exchange: str):
 
 
 def do_vip_loan_borrow(user_id: str, ec2_exchange: str):
-    """VIP 借贷 - 借款"""
+    """VIP 借贷 - 借款（支持多币种）"""
     config = get_vip_loan_config(user_id)
     if not config:
         print(f"\n用户 {user_id} 不支持 VIP 借贷功能")
@@ -110,63 +110,93 @@ def do_vip_loan_borrow(user_id: str, ec2_exchange: str):
     print(f"\n===== VIP 借贷 - 借款 =====")
     print(f"账户 ID: {account_id}")
 
-    # 选择借贷币种
-    loan_coin_idx = select_option("选择借贷币种:", LOAN_COINS + ["其他"])
-    if loan_coin_idx == len(LOAN_COINS):
-        loan_coin = input("请输入借贷币种: ").strip().upper()
-    else:
-        loan_coin = LOAN_COINS[loan_coin_idx]
+    # 收集多个借贷请求
+    borrow_requests = []
 
-    # 输入借贷金额
-    amount_str = input(f"\n请输入借贷金额 ({loan_coin}): ").strip()
-    try:
-        loan_amount = float(amount_str)
-        if loan_amount <= 0:
-            print("金额必须大于 0")
-            return
-    except ValueError:
-        print("无效的金额")
+    while True:
+        print(f"\n当前借款列表: {len(borrow_requests)} 笔")
+        for i, req in enumerate(borrow_requests, 1):
+            print(f"  {i}. {req['coin']}: {req['amount']:,.4f}")
+
+        # 选择操作
+        if borrow_requests:
+            action_idx = select_option("选择操作:", ["添加币种", "确认借款", "清空重选", "返回"])
+            if action_idx == 1:  # 确认借款
+                break
+            elif action_idx == 2:  # 清空重选
+                borrow_requests = []
+                continue
+            elif action_idx == 3:  # 返回
+                return
+        else:
+            action_idx = select_option("选择操作:", ["添加币种", "返回"])
+            if action_idx == 1:  # 返回
+                return
+
+        # 添加币种
+        print("\n请输入借贷币种 (如 USDT, USDC, BTC, ETH 等):")
+        loan_coin = input("币种: ").strip().upper()
+        if not loan_coin:
+            continue
+
+        # 输入借贷金额
+        amount_str = input(f"借贷金额 ({loan_coin}): ").strip()
+        try:
+            loan_amount = float(amount_str)
+            if loan_amount <= 0:
+                print("金额必须大于 0")
+                continue
+        except ValueError:
+            print("无效的金额")
+            continue
+
+        borrow_requests.append({"coin": loan_coin, "amount": loan_amount})
+
+    if not borrow_requests:
+        print("没有添加任何借款")
         return
 
     # 抵押币种（固定，不用选择）
     collateral_coin = ",".join(collateral_options)
-    print(f"\n抵押币种: {collateral_coin}")
 
-    # 固定使用浮动利率
-    is_flexible = True
-
-    # 确认
+    # 确认所有借款
     print(f"\n===== 确认借款信息 =====")
-    print(f"借贷币种: {loan_coin}")
-    print(f"借贷金额: {loan_amount:,.4f}")
+    print(f"账户 ID: {account_id}")
     print(f"抵押币种: {collateral_coin}")
     print(f"利率类型: 浮动")
-    print(f"账户 ID: {account_id}")
+    print(f"\n借款明细:")
+    for req in borrow_requests:
+        print(f"  - {req['coin']}: {req['amount']:,.4f}")
 
     confirm = input("\n确认借款? (y/n): ").strip().lower()
     if confirm != 'y':
         print("已取消")
         return
 
-    # 执行借款
+    # 逐个执行借款
     print("\n正在提交借款请求...")
-    try:
-        cmd = f"vip_loan_borrow {ec2_exchange} {account_id} {loan_coin} {loan_amount} {collateral_coin} true"
+    success_count = 0
+    for req in borrow_requests:
+        loan_coin = req["coin"]
+        loan_amount = req["amount"]
 
-        output = run_on_ec2(cmd)
-        result = json.loads(output.strip())
+        try:
+            cmd = f"vip_loan_borrow {ec2_exchange} {account_id} {loan_coin} {loan_amount} {collateral_coin} true"
+            output = run_on_ec2(cmd)
+            result = json.loads(output.strip())
 
-        if isinstance(result, dict) and "error" in result:
-            print(f"借款失败: {result['error']}")
-        elif isinstance(result, dict) and result.get("code"):
-            print(f"借款失败: {result.get('msg', '未知错误')}")
-        else:
-            print(f"\n借款成功!")
-            print(f"订单 ID: {result.get('orderId', 'N/A')}")
-            print(f"借贷金额: {result.get('loanAmount', loan_amount)} {loan_coin}")
+            if isinstance(result, dict) and "error" in result:
+                print(f"  {loan_coin} 借款失败: {result['error']}")
+            elif isinstance(result, dict) and result.get("code"):
+                print(f"  {loan_coin} 借款失败: {result.get('msg', '未知错误')}")
+            else:
+                print(f"  {loan_coin} 借款成功! 订单 ID: {result.get('orderId', 'N/A')}, 金额: {result.get('loanAmount', loan_amount)}")
+                success_count += 1
 
-    except Exception as e:
-        print(f"借款失败: {e}")
+        except Exception as e:
+            print(f"  {loan_coin} 借款失败: {e}")
+
+    print(f"\n借款完成: {success_count}/{len(borrow_requests)} 笔成功")
 
 
 def do_vip_loan_repay(user_id: str, ec2_exchange: str):
