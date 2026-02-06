@@ -52,20 +52,28 @@ def show_vip_loan_orders(user_id: str, ec2_exchange: str):
             print("\n当前没有进行中的借贷订单")
             return
 
-        print("\n" + "=" * 90)
-        print(f"{'订单ID':<15} {'借贷币种':<10} {'总负债':<18} {'利率':<10} {'LTV':<10} {'到期时间'}")
-        print("-" * 90)
+        print("\n" + "=" * 100)
+        print(f"{'订单ID':<15} {'借贷币种':<10} {'总负债':<18} {'利率':<14} {'LTV':<10} {'到期时间'}")
+        print("-" * 100)
 
         for order in rows:
             order_id = order.get("orderId", "")
             loan_coin = order.get("loanCoin", "")
             total_debt = float(order.get("totalDebt", 0))
-            loan_rate = float(order.get("loanRate", 0)) * 100  # 转换为百分比
+
+            # 利率可能是数字或字符串 "Flexible Rate"
+            loan_rate_raw = order.get("loanRate", 0)
+            try:
+                loan_rate = float(loan_rate_raw) * 100  # 转换为百分比
+                loan_rate_str = f"{loan_rate:.4f}%"
+            except (ValueError, TypeError):
+                loan_rate_str = str(loan_rate_raw)  # 显示原始字符串如 "Flexible Rate"
+
             current_ltv = float(order.get("currentLTV", 0)) * 100
             expiration = order.get("expirationTime", "")
 
             # 格式化到期时间
-            if expiration:
+            if expiration and expiration != "0":
                 from datetime import datetime
                 try:
                     exp_ts = int(expiration) / 1000
@@ -75,7 +83,7 @@ def show_vip_loan_orders(user_id: str, ec2_exchange: str):
             else:
                 exp_str = "浮动"
 
-            print(f"{order_id:<15} {loan_coin:<10} {total_debt:>15,.4f} {loan_rate:>8.4f}% {current_ltv:>8.2f}% {exp_str}")
+            print(f"{order_id:<15} {loan_coin:<10} {total_debt:>15,.4f} {loan_rate_str:>12} {current_ltv:>8.2f}% {exp_str}")
 
             # 显示抵押品信息
             collateral_coins = order.get("collateralCoin", "").split(",")
@@ -83,7 +91,7 @@ def show_vip_loan_orders(user_id: str, ec2_exchange: str):
             print(f"  剩余利息: {float(order.get('residualInterest', 0)):,.6f} {loan_coin}")
             print()
 
-        print("=" * 90)
+        print("=" * 100)
 
     except Exception as e:
         print(f"查询失败: {e}")
