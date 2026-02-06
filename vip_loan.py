@@ -211,11 +211,27 @@ def do_vip_loan_repay(user_id: str, ec2_exchange: str):
         total_debt = float(selected_order.get("totalDebt", 0))
         residual_interest = float(selected_order.get("residualInterest", 0))
 
+        # 查询可用余额
+        available_balance = 0.0
+        try:
+            balance_output = run_on_ec2(f"balance {ec2_exchange}")
+            balance_result = json.loads(balance_output.strip())
+            # 从现货余额中查找对应币种
+            if isinstance(balance_result, dict):
+                spot_balances = balance_result.get("spot", [])
+                for bal in spot_balances:
+                    if bal.get("asset") == loan_coin:
+                        available_balance = float(bal.get("free", 0))
+                        break
+        except:
+            pass  # 查询失败不影响还款流程
+
         print(f"\n===== 订单详情 =====")
         print(f"订单 ID: {order_id}")
         print(f"借贷币种: {loan_coin}")
         print(f"总负债: {total_debt:,.6f} {loan_coin}")
         print(f"剩余利息: {residual_interest:,.6f} {loan_coin}")
+        print(f"可用余额: {available_balance:,.6f} {loan_coin}")
 
         # 选择还款方式
         repay_type_idx = select_option("选择还款方式:", [
@@ -229,7 +245,7 @@ def do_vip_loan_repay(user_id: str, ec2_exchange: str):
         elif repay_type_idx == 1:
             repay_amount = residual_interest
         else:
-            amount_str = input(f"\n请输入还款金额 ({loan_coin}): ").strip()
+            amount_str = input(f"\n请输入还款金额 ({loan_coin}, 可用 {available_balance:,.4f}): ").strip()
             try:
                 repay_amount = float(amount_str)
                 if repay_amount <= 0:
