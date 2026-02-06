@@ -64,10 +64,9 @@ def do_withdraw(exchange: str = None, user_id: str = None):
             # circle 相关地址，根据类型显示网络
             if addr_type == 'apt':
                 addr_options.append(f"[{a['name']}] APT - 仅USDC")
-            elif 'sonic' in name_lower:
-                addr_options.append(f"[{a['name']}] SONIC - 仅USDC")
             else:
-                addr_options.append(f"[{a['name']}] {a['address'][:25]}... - 仅USDC")
+                # EVM 类型的 circle 地址都走 SONIC
+                addr_options.append(f"[{a['name']}] SONIC - 仅USDC")
         elif name_lower == 'reap':
             addr_options.append(f"[{a['name']}] MATIC - 仅USDC")
         else:
@@ -162,8 +161,8 @@ def do_withdraw(exchange: str = None, user_id: str = None):
 
     is_reap_address = addr_name_for_network == 'reap'
     is_circle_addr = 'circle' in addr_name_for_network
-    is_sonic_circle = is_circle_addr and 'sonic' in addr_name_for_network
     is_circle_apt = is_circle_addr and addr_type_for_network == 'apt'
+    is_circle_evm = is_circle_addr and addr_type_for_network == 'evm'
 
     if is_reap_address:
         network = "MATIC"
@@ -172,8 +171,8 @@ def do_withdraw(exchange: str = None, user_id: str = None):
         # 获取地址和memo
         address = selected['address']
         memo = selected.get('memo')
-    elif is_sonic_circle:
-        # sonic-circle 地址强制使用 SONIC 网络
+    elif is_circle_evm:
+        # circle EVM 地址强制使用 SONIC 网络
         network = "SONIC"
         print(f"\n⚠️  {selected['name']}地址使用Sonic网络，已自动选择SONIC")
         address = selected['address']
