@@ -54,18 +54,24 @@ def do_withdraw(exchange: str = None, user_id: str = None):
     selected = None
     addr_options = []
     for a in available_addresses:
+        name_lower = a.get('name', '').lower()
+        addr_type = a.get('type', '')
+
         if a.get('type') == 'fixed':
             coins_str = "/".join(a.get('coins', []))
             addr_options.append(f"[{a['name']}] {a.get('network', '')} - 仅{coins_str}")
-        else:
-            # 检查是否是circle或REAP地址，显示特殊标记
-            name_lower = a.get('name', '').lower()
-            if name_lower in ('circle', 'circle2', 'reap'):
-                addr_options.append(f"[{a['name']}] {a['address'][:25]}... - 仅USDC")
-            elif 'sonic' in name_lower and 'circle' in name_lower:
+        elif 'circle' in name_lower:
+            # circle 相关地址，根据类型显示网络
+            if addr_type == 'apt':
+                addr_options.append(f"[{a['name']}] APT - 仅USDC")
+            elif 'sonic' in name_lower:
                 addr_options.append(f"[{a['name']}] SONIC - 仅USDC")
             else:
-                addr_options.append(f"[{a['name']}] {a['address'][:25]}...")
+                addr_options.append(f"[{a['name']}] {a['address'][:25]}... - 仅USDC")
+        elif name_lower == 'reap':
+            addr_options.append(f"[{a['name']}] MATIC - 仅USDC")
+        else:
+            addr_options.append(f"[{a['name']}] {a['address'][:25]}...")
 
     # eb65 的 Bybit 不允许输入新地址
     if not is_eb65_bybit:
@@ -151,9 +157,13 @@ def do_withdraw(exchange: str = None, user_id: str = None):
 
     # 处理地址和网络
     # 特殊地址强制使用固定网络
-    is_reap_address = selected and selected.get('name', '').lower() == 'reap'
-    is_sonic_circle = selected and 'sonic' in selected.get('name', '').lower() and 'circle' in selected.get('name', '').lower()
-    is_circle_apt = selected and selected.get('name', '').lower() == 'circle' and selected.get('type') == 'apt'
+    addr_name_for_network = selected.get('name', '').lower() if selected else ''
+    addr_type_for_network = selected.get('type', '') if selected else ''
+
+    is_reap_address = addr_name_for_network == 'reap'
+    is_circle_addr = 'circle' in addr_name_for_network
+    is_sonic_circle = is_circle_addr and 'sonic' in addr_name_for_network
+    is_circle_apt = is_circle_addr and addr_type_for_network == 'apt'
 
     if is_reap_address:
         network = "MATIC"
