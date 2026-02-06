@@ -185,7 +185,7 @@ def _add_address(addresses: list, default_exchange: str = None, user_id: str = N
     # 自动检测地址类型
     addr_type = detect_address_type(address)
     type_names = {
-        "evm": "EVM (0x地址，可能是 Sonic/Polygon 等)",
+        "evm": "EVM (0x地址)",
         "sol": "SOL (Solana)",
         "sui": "SUI",
         "apt": "APT (Aptos)",
@@ -194,15 +194,29 @@ def _add_address(addresses: list, default_exchange: str = None, user_id: str = N
     }
     print(f"\n检测到地址类型: {type_names.get(addr_type, addr_type)}")
 
-    type_options = ["Sonic", "Polygon", "SOL (Solana)", "SUI", "APT (Aptos)", "其他"]
-    type_map = ["sonic", "polygon", "sol", "sui", "apt", "other"]
+    # Binance 支持的常用网络
+    type_options = [
+        "ETH (ERC20)",
+        "BSC (BEP20)",
+        "ARB (Arbitrum)",
+        "OP (Optimism)",
+        "MATIC (Polygon)",
+        "SOL (Solana)",
+        "TRX (TRC20)",
+        "AVAX (Avalanche C-Chain)",
+        "SUI",
+        "APT (Aptos)",
+        "Sonic",
+        "其他"
+    ]
+    type_map = ["eth", "bsc", "arb", "op", "matic", "sol", "trx", "avax", "sui", "apt", "sonic", "other"]
 
     if addr_type == "sui_apt":
         print("SUI 和 APT 地址格式相同，请选择:")
         confirm_type = select_option("选择地址类型:", ["SUI", "APT (Aptos)"])
         addr_type = "sui" if confirm_type == 0 else "apt"
     else:
-        confirm_type = select_option("确认地址类型:", type_options)
+        confirm_type = select_option("选择网络:", type_options)
         addr_type = type_map[confirm_type]
 
     memo = input("请输入 Memo/Tag (没有直接回车跳过): ").strip() or None
