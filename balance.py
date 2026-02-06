@@ -95,12 +95,16 @@ def show_balance(exchange: str = None):
         for coin in unified_coins:
             try:
                 bal_output = run_on_ec2(f"account_balance {exchange} UNIFIED {coin}")
-                bal = float(bal_output.strip())
-                if bal > 0:
-                    has_balance = True
-                    print(f"  {coin}: {bal:.4f}")
-            except (SSHError, ValueError):
-                pass
+                bal_output = bal_output.strip()
+                if bal_output:
+                    bal = float(bal_output)
+                    if bal > 0:
+                        has_balance = True
+                        print(f"  {coin}: {bal:.4f}")
+            except SSHError as e:
+                print(f"  ⚠️ 查询 {coin} 失败: {e}")
+            except ValueError:
+                print(f"  ⚠️ {coin} 返回异常值: '{bal_output}'")
         if not has_balance:
             print("  统一账户暂无余额")
     
