@@ -16,7 +16,7 @@ VIP_LOAN_CONFIG = {
     },
     "柏青": {
         "account_id": "396833626",
-        "collateral_coins": ["BTC", "ETH"],  # 可选 BTC 或 ETH
+        "collateral_coins": ["BTC", "ETH"],  # 固定 BTC,ETH
         "ec2_key": "binance3"
     }
 }
@@ -120,29 +120,19 @@ def do_vip_loan_borrow(user_id: str, ec2_exchange: str):
         print("无效的金额")
         return
 
-    # 选择抵押币种
-    if len(collateral_options) == 1:
-        collateral_coin = collateral_options[0]
-        print(f"\n抵押币种: {collateral_coin}")
-    else:
-        collateral_idx = select_option("选择抵押币种:", collateral_options)
-        collateral_coin = collateral_options[collateral_idx]
+    # 抵押币种（固定，不用选择）
+    collateral_coin = ",".join(collateral_options)
+    print(f"\n抵押币种: {collateral_coin}")
 
-    # 选择利率类型
-    rate_type_idx = select_option("选择利率类型:", ["浮动利率 (推荐)", "固定利率"])
-    is_flexible = rate_type_idx == 0
-
-    loan_term = None
-    if not is_flexible:
-        term_idx = select_option("选择借款期限:", ["30天", "60天", "90天", "180天"])
-        loan_term = [30, 60, 90, 180][term_idx]
+    # 固定使用浮动利率
+    is_flexible = True
 
     # 确认
     print(f"\n===== 确认借款信息 =====")
     print(f"借贷币种: {loan_coin}")
     print(f"借贷金额: {loan_amount:,.4f}")
     print(f"抵押币种: {collateral_coin}")
-    print(f"利率类型: {'浮动' if is_flexible else f'固定 {loan_term}天'}")
+    print(f"利率类型: 浮动")
     print(f"账户 ID: {account_id}")
 
     confirm = input("\n确认借款? (y/n): ").strip().lower()
@@ -153,9 +143,7 @@ def do_vip_loan_borrow(user_id: str, ec2_exchange: str):
     # 执行借款
     print("\n正在提交借款请求...")
     try:
-        cmd = f"vip_loan_borrow {ec2_exchange} {account_id} {loan_coin} {loan_amount} {collateral_coin} {'true' if is_flexible else 'false'}"
-        if loan_term:
-            cmd += f" {loan_term}"
+        cmd = f"vip_loan_borrow {ec2_exchange} {account_id} {loan_coin} {loan_amount} {collateral_coin} true"
 
         output = run_on_ec2(cmd)
         result = json.loads(output.strip())
