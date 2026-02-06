@@ -8,7 +8,7 @@ from utils import (
     select_option, select_user, select_account, get_ec2_exchange_key,
     get_exchange_base, get_user_accounts, load_config
 )
-from balance import show_balance, show_pm_ratio, show_gate_subaccounts
+from balance import show_balance, show_pm_ratio, show_gate_subaccounts, show_position_analysis
 from aster import show_aster_margin_ratio
 from hyperliquid_ops import show_hyperliquid_balance, do_hyperliquid_transfer
 from lighter_ops import show_lighter_balance, show_lighter_margin_ratio
@@ -93,8 +93,10 @@ def main():
                 # Binance 特有功能
                 if exchange_base == "binance":
                     options.append(("永续平仓", lambda ex=ec2_exchange: futures_close_menu(ex)))
+                    options.append(("持仓分析", lambda ex=ec2_exchange: show_position_analysis(ex)))
                     options.append(("理财管理", lambda ex=ec2_exchange: manage_earn(ex)))
-                    options.append(("稳定币交易", lambda ex=ec2_exchange: do_stablecoin_trade(ex)))
+                    if user_id != "litianyi":
+                        options.append(("稳定币交易", lambda ex=ec2_exchange: do_stablecoin_trade(ex)))
                     options.append(("BNB工具", lambda ex=ec2_exchange: manage_bnb_tools(ex)))
                     options.append(("统一保证金率", lambda ex=ec2_exchange: show_pm_ratio(ex)))
                     options.append(("历史费率", lambda ex=ec2_exchange: show_binance_funding_history(ex)))

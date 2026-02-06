@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """余额查询"""
 
+import json
 import requests
-from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name
+from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name, SSHError
 
 # 稳定币列表，价格视为 1 USD
 STABLECOINS = ['USDT', 'USDC', 'USD1', 'BUSD', 'TUSD', 'FDUSD']
@@ -127,6 +128,112 @@ def _parse_balance_from_output(output: str, coin: str) -> str:
                     pass
             break
     return "0"
+
+
+def show_position_analysis(exchange: str = None):
+    """持仓分析 - 显示永续合约持仓金额、浮盈亏、距离平仓线"""
+    if not exchange:
+        exchange = select_exchange(binance_only=True)
+        if not exchange:
+            return
+
+    display_name = get_exchange_display_name(exchange)
+    print(f"\n正在分析 {display_name} 永续合约持仓...")
+
+    # 获取永续合约持仓
+    try:
+        output = run_on_ec2(f"portfolio_um_positions {exchange}")
+        positions = json.loads(output.strip())
+
+        if isinstance(positions, dict) and "msg" in positions:
+            print(f"API 错误: {positions.get('msg')}")
+            return
+    except json.JSONDecodeError:
+        print("解析持仓数据失败")
+        return
+    except SSHError as e:
+        print(f"获取持仓失败: {e}")
+        return
+
+    # 过滤有持仓的
+    active_positions = []
+    for p in positions:
+        position_amt = float(p.get("positionAmt", 0))
+        if position_amt == 0:
+            continue
+
+        symbol = p.get("symbol", "")
+        entry_price = float(p.get("entryPrice", 0))
+        mark_price = float(p.get("markPrice", 0))
+        unrealized_pnl = float(p.get("unRealizedProfit", 0))
+        liquidation_price = float(p.get("liquidationPrice", 0))
+        notional = abs(position_amt * mark_price)
+        side = "LONG" if position_amt > 0 else "SHORT"
+
+        # 计算距离强平价格的百分比
+        if liquidation_price > 0 and mark_price > 0:
+            if side == "LONG":
+                distance_pct = (mark_price - liquidation_price) / mark_price * 100
+            else:
+                distance_pct = (liquidation_price - mark_price) / mark_price * 100
+        else:
+            distance_pct = None
+
+        active_positions.append({
+            "symbol": symbol,
+            "side": side,
+            "positionAmt": position_amt,
+            "entryPrice": entry_price,
+            "markPrice": mark_price,
+            "unrealizedPnl": unrealized_pnl,
+            "notional": notional,
+            "liquidationPrice": liquidation_price,
+            "distancePct": distance_pct,
+        })
+
+    active_positions.sort(key=lambda x: x["notional"], reverse=True)
+
+    if not active_positions:
+        print("\n没有永续合约持仓")
+        return
+
+    # 显示持仓分析
+    total_notional = sum(p["notional"] for p in active_positions)
+    total_pnl = sum(p["unrealizedPnl"] for p in active_positions)
+
+    print(f"\n{'=' * 65}")
+    print(f"  永续合约持仓分析")
+    print(f"{'=' * 65}")
+
+    for i, pos in enumerate(active_positions, 1):
+        symbol = pos["symbol"]
+        side = "多" if pos["side"] == "LONG" else "空"
+        amt = pos["positionAmt"]
+        notional = pos["notional"]
+        entry = pos["entryPrice"]
+        mark = pos["markPrice"]
+        pnl = pos["unrealizedPnl"]
+        liq = pos["liquidationPrice"]
+        dist = pos["distancePct"]
+
+        pnl_str = f"+{pnl:.2f}" if pnl >= 0 else f"{pnl:.2f}"
+
+        print(f"\n  {i}. {symbol} [{side}]")
+        print(f"     持仓金额: ${notional:,.2f} | 数量: {amt}")
+        print(f"     开仓价: {entry} | 标记价: {mark}")
+        print(f"     浮动盈亏: ${pnl_str}")
+        if liq > 0 and dist is not None:
+            print(f"     强平价格: {liq} | 距平仓线: {dist:.2f}%")
+        elif liq > 0:
+            print(f"     强平价格: {liq}")
+        else:
+            print(f"     强平价格: N/A (统一保证金账户级别)")
+
+    print(f"\n{'─' * 65}")
+    total_pnl_str = f"+{total_pnl:.2f}" if total_pnl >= 0 else f"{total_pnl:.2f}"
+    print(f"  总持仓金额: ${total_notional:,.2f}")
+    print(f"  总浮动盈亏: ${total_pnl_str}")
+    print(f"{'=' * 65}")
 
 
 def get_coin_balance(exchange: str, coin: str, account_type: str = "SPOT") -> str:
