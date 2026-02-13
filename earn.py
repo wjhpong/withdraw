@@ -117,7 +117,9 @@ def do_earn_subscribe(exchange: str):
 
     print("\n正在申购...")
     try:
-        output = run_on_ec2(f"earn subscribe {exchange} {coin} {amount}")
+        # 如果是整数值，去掉小数点（EC2 端可能不接受 10000.0 格式）
+        amount_str = str(int(amount)) if amount == int(amount) else str(amount)
+        output = run_on_ec2(f"earn subscribe {exchange} {coin} {amount_str}")
         print(output)
         if "error" in output.lower() or "失败" in output:
             print("\n⚠️  申购可能失败，请检查交易所确认")
@@ -154,7 +156,8 @@ def do_earn_redeem(exchange: str):
         if select_option(f"确认赎回 {amount} {coin}?", ["确认", "取消"]) != 0:
             print("已取消")
             return
-        cmd = f"earn redeem {exchange} {coin} {amount}"
+        amount_str_fmt = str(int(amount)) if amount == int(amount) else str(amount)
+        cmd = f"earn redeem {exchange} {coin} {amount_str_fmt}"
     else:
         if select_option(f"确认全部赎回 {coin}?", ["确认", "取消"]) != 0:
             print("已取消")
