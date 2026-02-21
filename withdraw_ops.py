@@ -291,7 +291,7 @@ def do_withdraw(exchange: str = None, user_id: str = None):
                     print(f"   统一账户余额: {unified_balance} {coin}")
                     print(f"   正在从统一账户划转 {transfer_amount} {coin} 到资金账户...")
 
-                    transfer_result = run_on_ec2(f"transfer bybit UNIFIED FUND {coin} {transfer_amount}")
+                    transfer_result = run_on_ec2(f"transfer {exchange} UNIFIED FUND {coin} {transfer_amount}")
                     print(transfer_result)
                     time.sleep(1)
 

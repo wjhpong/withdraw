@@ -394,13 +394,13 @@ def detect_address_type(address: str) -> str:
 
 # 旧的交易所列表 (为了兼容)
 EXCHANGES = [
-    ("binance", "BINANCE - Dennis"),
-    ("binance2", "BINANCE - Vanie"),
-    ("binance3", "BINANCE - 柏青"),
-    ("bybit", "BYBIT"),
-    ("gate", "GATE.IO"),
-    ("bitget", "BITGET"),
-    ("hyperliquid", "HYPERLIQUID"),
+    ("dennis_binance", "BINANCE - Dennis"),
+    ("vanie_binance", "BINANCE - Vanie"),
+    ("baiqing_binance", "BINANCE - 柏青"),
+    ("dennis_bybit", "BYBIT"),
+    ("dennis_gate", "GATE.IO"),
+    ("dennis_bitget", "BITGET"),
+    ("dennis_hyperliquid", "HYPERLIQUID"),
 ]
 
 

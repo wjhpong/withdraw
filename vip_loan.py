@@ -12,12 +12,12 @@ VIP_LOAN_CONFIG = {
     "dennis": {
         "account_id": "35693211",
         "collateral_coins": ["BTC"],  # 固定 BTC
-        "ec2_key": "binance"
+        "ec2_key": "dennis_binance"
     },
     "baiqing": {
         "account_id": "396833626",
         "collateral_coins": ["BTC", "ETH"],  # 固定 BTC,ETH
-        "ec2_key": "binance3"
+        "ec2_key": "baiqing_binance"
     }
 }
 

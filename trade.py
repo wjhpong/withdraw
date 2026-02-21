@@ -325,7 +325,7 @@ def trade_bfusd_usdt(exchange: str = None):
     while True:
         print("\n正在获取 BFUSD/USDT 深度...")
         try:
-            output = run_on_ec2("orderbook binance BFUSDUSDT")
+            output = run_on_ec2(f"orderbook {exchange} BFUSDUSDT")
             print(output)
         except SSHError as e:
             print(f"获取深度失败: {e}")
@@ -400,7 +400,7 @@ def trade_usd1_usdt(exchange: str = None):
     while True:
         print("\n正在获取 USD1/USDT 深度...")
         try:
-            output = run_on_ec2("orderbook binance USD1USDT")
+            output = run_on_ec2(f"orderbook {exchange} USD1USDT")
             print(output)
         except SSHError as e:
             print(f"获取深度失败: {e}")

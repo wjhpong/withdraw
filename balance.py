@@ -278,7 +278,7 @@ def get_coin_balance(exchange: str, coin: str, account_type: str = "SPOT") -> st
     try:
         if exchange_base == "bybit":
             if account_type == "UNIFIED":
-                output = run_on_ec2(f"account_balance bybit UNIFIED {coin}").strip()
+                output = run_on_ec2(f"account_balance {exchange} UNIFIED {coin}").strip()
                 if output and not output.startswith(("用法", "未知", "错误")):
                     try:
                         return str(float(output))
