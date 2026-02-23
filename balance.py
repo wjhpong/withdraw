@@ -3,7 +3,9 @@
 
 import json
 import requests
-from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name, SSHError
+from utils import (run_on_ec2, select_option, select_exchange, get_exchange_base,
+                   get_exchange_display_name, get_user_accounts, get_ec2_exchange_key,
+                   load_config, SSHError)
 
 # 稳定币列表，价格视为 1 USD
 STABLECOINS = ['USDT', 'USDC', 'USD1', 'BUSD', 'TUSD', 'FDUSD']
@@ -307,3 +309,112 @@ def get_coin_balance(exchange: str, coin: str, account_type: str = "SPOT") -> st
     except SSHError as e:
         print(f"❌ 查询余额失败: {e}")
         return "0"
+
+
+def show_multi_exchange_balance(user_id: str):
+    """查询用户所有交易所的 USDT 余额汇总"""
+    config = load_config()
+    user_name = config.get("users", {}).get(user_id, {}).get("name", user_id)
+    accounts = get_user_accounts(user_id)
+
+    if not accounts:
+        print(f"\n{user_name} 没有配置任何交易所账号")
+        return
+
+    print(f"\n正在查询 {user_name} 所有交易所 USDT 余额...")
+    print(f"\n{'=' * 55}")
+    print(f"  {user_name} - 多交易所 USDT 余额")
+    print(f"{'=' * 55}")
+
+    total_usdt = 0.0
+    results = []
+
+    for account_id, exchange_name in accounts:
+        ec2_exchange = get_ec2_exchange_key(user_id, account_id)
+        exchange_base = get_exchange_base(ec2_exchange)
+
+        # Hyperliquid 使用本地查询
+        if exchange_base == "hyperliquid":
+            try:
+                from hyperliquid_ops import get_hyperliquid_config
+                from hyperliquid.info import Info
+                from hyperliquid.utils import constants
+                wallet_address, _ = get_hyperliquid_config()
+                info = Info(constants.MAINNET_API_URL, skip_ws=True)
+                user_state = info.user_state(wallet_address)
+                usdt = float(user_state.get("withdrawable", 0))
+                results.append((exchange_name, usdt, None))
+                total_usdt += usdt
+            except Exception as e:
+                results.append((exchange_name, None, str(e)))
+            continue
+
+        # Lighter 使用本地查询
+        if exchange_base == "lighter":
+            try:
+                import asyncio
+                from lighter_ops import get_lighter_config, _get_account_info
+                wallet_address, _, _ = get_lighter_config(ec2_exchange)
+                account_info = asyncio.run(_get_account_info(wallet_address))
+                usdt = 0.0
+                if account_info and account_info.accounts:
+                    for acc in account_info.accounts:
+                        if acc.account_type == 0:
+                            usdt = float(acc.available_balance) if acc.available_balance else 0
+                            break
+                results.append((exchange_name, usdt, None))
+                total_usdt += usdt
+            except Exception as e:
+                results.append((exchange_name, None, str(e)))
+            continue
+
+        # 通过 EC2 查询
+        try:
+            if exchange_base == "bybit":
+                # Bybit 统一账户查 USDT
+                output = run_on_ec2(f"account_balance {ec2_exchange} UNIFIED USDT").strip()
+                try:
+                    usdt = float(output)
+                except ValueError:
+                    usdt = 0.0
+                # 再查资金账户
+                fund_output = run_on_ec2(f"balance {ec2_exchange}")
+                fund_usdt = float(_parse_balance_from_output(fund_output, "USDT"))
+                usdt += fund_usdt
+            elif exchange_base in ("gate", "bitget"):
+                output = run_on_ec2(f"balance {ec2_exchange}")
+                usdt = float(_parse_balance_from_output(output, "USDT"))
+            else:
+                # Binance, Aster 等 - 查现货和理财
+                output = run_on_ec2(f"account_balance {ec2_exchange} SPOT USDT").strip()
+                try:
+                    usdt = float(output)
+                except ValueError:
+                    usdt = 0.0
+                # Binance 额外查理财账户
+                if exchange_base == "binance":
+                    try:
+                        earn_output = run_on_ec2(f"account_balance {ec2_exchange} EARN USDT").strip()
+                        earn_usdt = float(earn_output)
+                        usdt += earn_usdt
+                    except (ValueError, SSHError):
+                        pass
+
+            results.append((exchange_name, usdt, None))
+            total_usdt += usdt
+
+        except SSHError as e:
+            results.append((exchange_name, None, str(e)))
+
+    # 显示结果
+    for exchange_name, usdt, error in results:
+        if error:
+            print(f"  {exchange_name:<18} ⚠️  查询失败: {error}")
+        elif usdt is not None:
+            print(f"  {exchange_name:<18} {usdt:>14,.2f} USDT")
+        else:
+            print(f"  {exchange_name:<18} ⚠️  未知错误")
+
+    print(f"{'─' * 55}")
+    print(f"  {'合计':<18} {total_usdt:>14,.2f} USDT")
+    print(f"{'=' * 55}")

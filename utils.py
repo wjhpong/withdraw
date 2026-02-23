@@ -300,16 +300,19 @@ def select_account(user_id: str, allow_back: bool = True, show_combined: bool = 
 
     account_names = [name for _, name in accounts]
 
-    # 添加综合收益选项（单账号也显示，方便查看历史收益）
+    # 添加特殊选项（单账号也显示，方便查看）
     if show_combined:
+        account_names.append("== 多交易所余额 ==")
         account_names.append("== 综合收益 ==")
 
     idx = select_option("请选择交易所:", account_names, allow_back=allow_back)
     if idx == -1:
         return None
 
-    # 检查是否选择了综合收益
+    # 检查是否选择了特殊选项
     if show_combined and idx == len(accounts):
+        return "__multi_balance__"
+    if show_combined and idx == len(accounts) + 1:
         return "__combined__"
 
     return accounts[idx][0]

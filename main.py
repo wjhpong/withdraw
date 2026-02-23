@@ -8,7 +8,7 @@ from utils import (
     select_option, select_user, select_account, get_ec2_exchange_key,
     get_exchange_base, get_user_accounts, load_config
 )
-from balance import show_balance, show_pm_ratio, show_gate_subaccounts, show_position_analysis
+from balance import show_balance, show_pm_ratio, show_gate_subaccounts, show_position_analysis, show_multi_exchange_balance
 from aster import show_aster_margin_ratio
 from hyperliquid_ops import show_hyperliquid_balance, do_hyperliquid_transfer
 from lighter_ops import show_lighter_balance, show_lighter_margin_ratio
@@ -42,7 +42,12 @@ def main():
         if not account_id:
             continue  # 返回重新选用户
 
-        # 处理综合收益选项
+        # 处理特殊选项
+        if account_id == "__multi_balance__":
+            show_multi_exchange_balance(user_id)
+            input("\n按回车继续...")
+            continue
+
         if account_id == "__combined__":
             show_combined_funding_summary(user_id)
             input("\n按回车继续...")
