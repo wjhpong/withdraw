@@ -13,7 +13,7 @@ from aster import show_aster_margin_ratio
 from hyperliquid_ops import show_hyperliquid_balance, do_hyperliquid_transfer
 from lighter_ops import show_lighter_balance, show_lighter_margin_ratio
 from withdraw_ops import do_withdraw
-from transfer import do_transfer
+from transfer import do_transfer, do_binance_subaccount_transfer
 from earn import manage_earn
 from trade import do_stablecoin_trade, cancel_orders_menu, market_sell_menu, futures_close_menu
 from addresses import manage_addresses
@@ -109,6 +109,9 @@ def main():
                     # VIP 借贷 (仅 dennis 和 柏青)
                     if get_vip_loan_config(user_id):
                         options.append(("VIP借贷", lambda u=user_id, ex=ec2_exchange: manage_vip_loan(u, ex)))
+                    # 子账户划转 (仅 dennis)
+                    if user_id == "dennis":
+                        options.append(("子账户划转", lambda ex=ec2_exchange: do_binance_subaccount_transfer(ex)))
 
                 # Gate 特有功能
                 if exchange_base == "gate":

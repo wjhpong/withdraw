@@ -64,9 +64,9 @@ def get_user_accounts(user_id: str):
 
 
 def get_ec2_exchange_key(user_id: str, account_id: str) -> str:
-    """获取 EC2 使用的交易所 key (如 binance, binance2, binance3)
+    """获取 EC2 使用的交易所 key (如 dennis_binance, baiqing_binance)
 
-    EC2 上的脚本使用 binance, binance2 等 key 区分不同账号
+    EC2 上的脚本使用 {user}_{exchange} 格式的 key 区分不同账号
     这里通过 _legacy 映射找到对应的 key
     """
     config = load_config()
@@ -335,7 +335,7 @@ def select_user_and_account(allow_back: bool = True):
 # ===================== 工具函数 =====================
 
 def get_exchange_base(exchange: str) -> str:
-    """获取交易所基础类型 (binance/binance2 都返回 binance)"""
+    """获取交易所基础类型 (dennis_binance -> binance)"""
     if exchange.startswith("binance") or "_binance" in exchange:
         return "binance"
     if exchange.startswith("gate") or "_gate" in exchange:
