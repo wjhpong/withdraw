@@ -474,3 +474,113 @@ def show_multi_exchange_balance(user_id: str):
     print(f"{'─' * 55}")
     print(f"  {'合计':<18} {total_usdt:>14,.2f} USDT")
     print(f"{'=' * 55}")
+
+    # 查询合约持仓分布
+    _show_position_distribution(user_id, accounts)
+
+
+def _show_position_distribution(user_id: str, accounts: list):
+    """查询并展示用户所有交易所的合约持仓分布"""
+    config = load_config()
+    user_name = config.get("users", {}).get(user_id, {}).get("name", user_id)
+
+    all_positions = []  # [(symbol, notional), ...]
+
+    print(f"\n正在查询合约持仓...")
+
+    for account_id, exchange_name in accounts:
+        ec2_exchange = get_ec2_exchange_key(user_id, account_id)
+        exchange_base = get_exchange_base(ec2_exchange)
+
+        # Binance - 通过 EC2 查询 portfolio_um_positions
+        if exchange_base == "binance":
+            try:
+                output = run_on_ec2(f"portfolio_um_positions {ec2_exchange}")
+                positions = json.loads(output.strip())
+                if isinstance(positions, list):
+                    for p in positions:
+                        amt = float(p.get("positionAmt", 0))
+                        if amt == 0:
+                            continue
+                        symbol = p.get("symbol", "").replace("USDT", "")
+                        mark = float(p.get("markPrice", 0))
+                        notional = abs(amt * mark)
+                        all_positions.append((symbol, notional))
+            except (json.JSONDecodeError, SSHError):
+                pass
+
+        # Hyperliquid - 本地查询
+        elif exchange_base == "hyperliquid":
+            try:
+                from hyperliquid_ops import get_hyperliquid_config
+                from hyperliquid.info import Info
+                from hyperliquid.utils import constants
+                wallet_address, _ = get_hyperliquid_config()
+                info = Info(constants.MAINNET_API_URL, skip_ws=True)
+                user_state = info.user_state(wallet_address)
+                all_mids = info.all_mids()
+                for pos in user_state.get("assetPositions", []):
+                    position = pos.get("position", {})
+                    szi = float(position.get("szi", 0))
+                    if szi == 0:
+                        continue
+                    coin = position.get("coin", "")
+                    current_px = float(all_mids.get(coin, 0))
+                    notional = abs(szi * current_px)
+                    all_positions.append((coin, notional))
+            except Exception:
+                pass
+
+        # Lighter - 本地查询
+        elif exchange_base == "lighter":
+            try:
+                import asyncio
+                from lighter_ops import get_lighter_config, _get_account_info
+                wallet_address, _, _ = get_lighter_config(ec2_exchange)
+                account_info = asyncio.run(_get_account_info(wallet_address))
+                if account_info and account_info.accounts:
+                    for acc in account_info.accounts:
+                        if acc.account_type == 0 and acc.positions:
+                            for pos in acc.positions:
+                                size = float(pos.position) if hasattr(pos, 'position') and pos.position else 0
+                                if size == 0:
+                                    continue
+                                symbol = pos.symbol if hasattr(pos, 'symbol') else "?"
+                                # 去掉 _USDT 后缀
+                                symbol = symbol.replace("_USDT", "").replace("USDT", "")
+                                pv = float(pos.position_value) if hasattr(pos, 'position_value') and pos.position_value else 0
+                                all_positions.append((symbol, abs(pv)))
+                            break
+            except Exception:
+                pass
+
+    if not all_positions:
+        print("\n没有合约持仓")
+        return
+
+    # 合并同一币种的持仓
+    merged = {}
+    for symbol, notional in all_positions:
+        merged[symbol] = merged.get(symbol, 0) + notional
+
+    # 按市值排序
+    sorted_positions = sorted(merged.items(), key=lambda x: x[1], reverse=True)
+    total_notional = sum(v for _, v in sorted_positions)
+
+    print(f"\n{'=' * 55}")
+    print(f"  {user_name} 合约持仓分布")
+    print(f"  总开仓市值: ${total_notional:,.2f} USDT")
+    print(f"{'=' * 55}")
+
+    # 柱状图展示
+    BAR_MAX_LEN = 20
+    max_notional = sorted_positions[0][1] if sorted_positions else 1
+    BLOCKS = " ░▒▓█"
+
+    for symbol, notional in sorted_positions:
+        pct = (notional / total_notional * 100) if total_notional > 0 else 0
+        bar_len = int(notional / max_notional * BAR_MAX_LEN)
+        bar = "█" * bar_len
+        print(f"  {symbol:>10} {bar:<{BAR_MAX_LEN}}  $ {notional:>12,.2f} ({pct:>5.1f}%)")
+
+    print(f"{'=' * 55}")
