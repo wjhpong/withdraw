@@ -189,6 +189,7 @@ def show_position_analysis(exchange: str = None):
             continue
 
         symbol = p.get("symbol", "")
+        leverage = int(p.get("leverage", 0))
         entry_price = float(p.get("entryPrice", 0))
         mark_price = float(p.get("markPrice", 0))
         unrealized_pnl = float(p.get("unRealizedProfit", 0))
@@ -213,6 +214,7 @@ def show_position_analysis(exchange: str = None):
             "markPrice": mark_price,
             "unrealizedPnl": unrealized_pnl,
             "notional": notional,
+            "leverage": leverage,
             "liquidationPrice": liquidation_price,
             "distancePct": distance_pct,
         })
@@ -244,7 +246,9 @@ def show_position_analysis(exchange: str = None):
 
         pnl_str = f"+{pnl:.2f}" if pnl >= 0 else f"{pnl:.2f}"
 
-        print(f"\n  {i}. {symbol} [{side}]")
+        lev = pos["leverage"]
+        lev_str = f" {lev}x" if lev > 0 else ""
+        print(f"\n  {i}. {symbol} [{side}]{lev_str}")
         print(f"     持仓金额: ${notional:,.2f} | 数量: {amt}")
         print(f"     开仓价: {entry} | 标记价: {mark}")
         print(f"     浮动盈亏: ${pnl_str}")
@@ -260,6 +264,58 @@ def show_position_analysis(exchange: str = None):
     print(f"  总持仓金额: ${total_notional:,.2f}")
     print(f"  总浮动盈亏: ${total_pnl_str}")
     print(f"{'=' * 65}")
+
+    # 修改杠杆倍数
+    while True:
+        action = select_option("\n是否修改杠杆倍数?", ["修改杠杆", "返回"], allow_back=True)
+        if action != 0:
+            break
+
+        # 选择要修改的仓位
+        pos_options = []
+        for p in active_positions:
+            side_str = "多" if p["side"] == "LONG" else "空"
+            pos_options.append(f"{p['symbol']} [{side_str}] 当前 {p['leverage']}x")
+        idx = select_option("选择要修改的仓位:", pos_options, allow_back=True)
+        if idx == -1:
+            continue
+
+        pos = active_positions[idx]
+        new_lev = input(f"请输入新杠杆倍数 (当前 {pos['leverage']}x, 范围 1-125, 输入 0 返回): ").strip()
+        if not new_lev or new_lev == "0":
+            continue
+
+        try:
+            new_lev_int = int(new_lev)
+            if new_lev_int < 1 or new_lev_int > 125:
+                print("杠杆倍数必须在 1-125 之间")
+                continue
+        except ValueError:
+            print("请输入有效的数字")
+            continue
+
+        side_str = "多" if pos["side"] == "LONG" else "空"
+        print(f"\n确认修改 {pos['symbol']} [{side_str}] 杠杆: {pos['leverage']}x → {new_lev_int}x")
+        confirm = select_option("确认?", ["确认", "取消"])
+        if confirm != 0:
+            print("已取消")
+            continue
+
+        try:
+            output = run_on_ec2(f"change_leverage {exchange} {pos['symbol']} {new_lev_int}")
+            try:
+                result = json.loads(output.strip())
+                if "error" in result:
+                    print(f"❌ 修改失败: {result.get('error', result.get('msg', str(result)))}")
+                elif "leverage" in result:
+                    print(f"✅ {pos['symbol']} 杠杆已修改为 {result['leverage']}x")
+                    pos["leverage"] = int(result["leverage"])
+                else:
+                    print(output)
+            except json.JSONDecodeError:
+                print(output)
+        except SSHError as e:
+            print(f"❌ 修改失败: {e}")
 
 
 def get_coin_balance(exchange: str, coin: str, account_type: str = "SPOT") -> str:
