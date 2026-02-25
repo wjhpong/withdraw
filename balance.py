@@ -146,14 +146,22 @@ def _parse_balance_from_output(output: str, coin: str) -> str:
         if line_upper.startswith(coin_upper + '\t') or line_upper.startswith(coin_upper + ' '):
             parts = line.split()
             if len(parts) >= 2:
+                raw = parts[1].strip()
                 try:
-                    # 验证是否为有效数字
-                    float(parts[1])
-                    return parts[1]
-                except (ValueError, IndexError):
+                    return str(_parse_number(raw))
+                except ValueError:
                     pass
             break
     return "0"
+
+
+def _parse_number(s: str) -> float:
+    """解析数字字符串，支持 K/M/B 后缀和逗号"""
+    s = s.strip().replace(",", "")
+    suffixes = {"K": 1e3, "M": 1e6, "B": 1e9}
+    if s and s[-1].upper() in suffixes:
+        return float(s[:-1]) * suffixes[s[-1].upper()]
+    return float(s)
 
 
 def show_position_analysis(exchange: str = None):
@@ -368,7 +376,7 @@ def get_coin_balance(exchange: str, coin: str, account_type: str = "SPOT") -> st
 
 
 def show_multi_exchange_balance(user_id: str):
-    """查询用户所有交易所的 USDT 余额汇总"""
+    """查询用户所有交易所的稳定币余额汇总 (USDT/USD1/USDC)"""
     config = load_config()
     user_name = config.get("users", {}).get(user_id, {}).get("name", user_id)
     accounts = get_user_accounts(user_id)
@@ -377,9 +385,9 @@ def show_multi_exchange_balance(user_id: str):
         print(f"\n{user_name} 没有配置任何交易所账号")
         return
 
-    print(f"\n正在查询 {user_name} 所有交易所 USDT 余额...")
+    print(f"\n正在查询 {user_name} 所有交易所稳定币余额...")
     print(f"\n{'=' * 55}")
-    print(f"  {user_name} - 多交易所 USDT 余额")
+    print(f"  {user_name} - 多交易所稳定币余额")
     print(f"{'=' * 55}")
 
     total_usdt = 0.0
@@ -447,7 +455,7 @@ def show_multi_exchange_balance(user_id: str):
                     usdt = float(output)
                 except ValueError:
                     usdt = 0.0
-                # Binance 额外查理财账户
+                # Binance 额外查理财账户和统一账户 (PM)
                 if exchange_base == "binance":
                     try:
                         earn_output = run_on_ec2(f"account_balance {ec2_exchange} EARN USDT").strip()
@@ -455,6 +463,14 @@ def show_multi_exchange_balance(user_id: str):
                         usdt += earn_usdt
                     except (ValueError, SSHError):
                         pass
+                    # 统一账户 (PM) 的稳定币: USDT, USD1, USDC
+                    for coin in ("USDT", "USD1", "USDC"):
+                        try:
+                            pm_output = run_on_ec2(f"account_balance {ec2_exchange} PM {coin}").strip()
+                            pm_val = float(pm_output)
+                            usdt += pm_val
+                        except (ValueError, SSHError):
+                            pass
 
             results.append((exchange_name, usdt, None))
             total_usdt += usdt
