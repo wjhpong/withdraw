@@ -448,8 +448,30 @@ def show_multi_exchange_balance(user_id: str):
             elif exchange_base in ("gate", "bitget"):
                 output = run_on_ec2(f"balance {ec2_exchange}")
                 usdt = float(_parse_balance_from_output(output, "USDT"))
+            elif exchange_base == "aster":
+                # Aster - 从 balance 输出解析合约账户和现货的 USDT
+                output = run_on_ec2(f"balance {ec2_exchange}")
+                usdt = 0.0
+                for line in output.split('\n'):
+                    parts = line.split()
+                    # 合约账户格式: "USDT      余额:      64937.7085  可提:   45445.7974"
+                    if len(parts) >= 2 and parts[0] == "USDT" and "余额:" in line:
+                        for j, p in enumerate(parts):
+                            if p == "余额:" and j + 1 < len(parts):
+                                try:
+                                    usdt += float(parts[j + 1])
+                                except ValueError:
+                                    pass
+                    # 现货格式: "USDT     可用:      1000.0  冻结:     0.0"
+                    elif len(parts) >= 2 and parts[0] == "USDT" and "可用:" in line:
+                        for j, p in enumerate(parts):
+                            if p == "可用:" and j + 1 < len(parts):
+                                try:
+                                    usdt += float(parts[j + 1])
+                                except ValueError:
+                                    pass
             else:
-                # Binance, Aster 等 - 查现货和理财
+                # Binance 等 - 查现货和理财
                 output = run_on_ec2(f"account_balance {ec2_exchange} SPOT USDT").strip()
                 try:
                     usdt = float(output)
