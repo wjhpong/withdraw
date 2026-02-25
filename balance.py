@@ -592,6 +592,31 @@ def _show_position_distribution(user_id: str, accounts: list):
             except Exception:
                 pass
 
+        # Aster - 从 balance 输出解析持仓
+        elif exchange_base == "aster":
+            try:
+                output = run_on_ec2(f"balance {ec2_exchange}")
+                for line in output.split('\n'):
+                    parts = line.split()
+                    # 格式: "ASTERUSDT  SHORT  数量:191176.0000  杠杆:3x"
+                    if len(parts) >= 3 and parts[1] in ("LONG", "SHORT") and parts[2].startswith("数量:"):
+                        symbol = parts[0].replace("USDT", "")
+                        amt = abs(float(parts[2].split(":")[1]))
+                        # 下一行有标记价: "开仓:0.5946  标记:0.6965 ..."
+                        # 从同一输出中查找
+                        lines = output.split('\n')
+                        idx = lines.index(line)
+                        if idx + 1 < len(lines):
+                            next_line = lines[idx + 1]
+                            for part in next_line.split():
+                                if part.startswith("标记:"):
+                                    mark = float(part.split(":")[1])
+                                    notional = amt * mark
+                                    all_positions.append((symbol, notional))
+                                    break
+            except (SSHError, ValueError):
+                pass
+
     if not all_positions:
         print("\n没有合约持仓")
         return
