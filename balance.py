@@ -477,22 +477,7 @@ def show_multi_exchange_balance(user_id: str):
                     usdt = float(output)
                 except ValueError:
                     usdt = 0.0
-                # Binance 额外查理财账户和统一账户 (PM)
-                if exchange_base == "binance":
-                    try:
-                        earn_output = run_on_ec2(f"account_balance {ec2_exchange} EARN USDT").strip()
-                        earn_usdt = float(earn_output)
-                        usdt += earn_usdt
-                    except (ValueError, SSHError):
-                        pass
-                    # 统一账户 (PM) 的稳定币: USDT, USD1, USDC
-                    for coin in ("USDT", "USD1", "USDC"):
-                        try:
-                            pm_output = run_on_ec2(f"account_balance {ec2_exchange} PM {coin}").strip()
-                            pm_val = float(pm_output)
-                            usdt += pm_val
-                        except (ValueError, SSHError):
-                            pass
+                # Binance 只统计现货 (SPOT)，不含理财和统一账户
 
             results.append((exchange_name, usdt, None))
             total_usdt += usdt
