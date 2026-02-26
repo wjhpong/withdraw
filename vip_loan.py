@@ -332,13 +332,16 @@ def manage_vip_loan(user_id: str, ec2_exchange: str):
         print(f"\n用户 {user_id} 不支持 VIP 借贷功能")
         return
 
+    # 使用配置中的 ec2_key，而非主菜单传入的 ec2_exchange
+    ec2_key = config.get("ec2_key", ec2_exchange)
+
     while True:
         print(f"\n===== VIP 借贷管理 =====")
 
         options = [
-            ("查询借贷订单", lambda: show_vip_loan_orders(user_id, ec2_exchange)),
-            ("借款", lambda: do_vip_loan_borrow(user_id, ec2_exchange)),
-            ("还款", lambda: do_vip_loan_repay(user_id, ec2_exchange)),
+            ("查询借贷订单", lambda: show_vip_loan_orders(user_id, ec2_key)),
+            ("借款", lambda: do_vip_loan_borrow(user_id, ec2_key)),
+            ("还款", lambda: do_vip_loan_repay(user_id, ec2_key)),
             ("返回", None)
         ]
 

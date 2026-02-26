@@ -15,7 +15,7 @@ CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 DEFAULT_EC2_HOST = "tixian"
 
 # 网络列表
-EVM_NETWORKS = ["ERC20", "BSC", "ARBITRUM", "OPTIMISM", "MATIC", "LINEA", "AVAXC", "MANTLE", "CELO", "PLASMA", "TON"]
+EVM_NETWORKS = ["ETH", "BSC", "ARBITRUM", "OPTIMISM", "MATIC", "LINEA", "AVAXC", "MANTLE", "CELO", "PLASMA", "TON"]
 TRC_NETWORKS = ["TRC20"]
 SOL_NETWORKS = ["SOL"]
 SUI_NETWORKS = ["SUI"]
@@ -67,27 +67,28 @@ def get_ec2_exchange_key(user_id: str, account_id: str) -> str:
     """获取 EC2 使用的交易所 key (如 dennis_binance, baiqing_binance)
 
     EC2 上的脚本使用 {user}_{exchange} 格式的 key 区分不同账号
-    这里通过 _legacy 映射找到对应的 key
     """
     config = load_config()
-    legacy = config.get("_legacy", {})
-
-    # 反向查找：找到映射到该用户的所有 legacy key
-    user_legacy_keys = [k for k, v in legacy.items() if v == user_id]
-
-    # 获取账户的交易所类型
     user_accounts = config.get("users", {}).get(user_id, {}).get("accounts", {})
     account = user_accounts.get(account_id, {})
     exchange_type = account.get("exchange", account_id)
 
-    # 找到匹配交易所类型的 legacy key
+    # 标准格式: {user_id}_{exchange}
+    ec2_key = f"{user_id}_{exchange_type}"
+
+    # 检查 _legacy 是否有这个 key
+    legacy = config.get("_legacy", {})
+    if ec2_key in legacy:
+        return ec2_key
+
+    # 兜底: 在 legacy 中查找包含 _{exchange} 的 key
+    user_legacy_keys = [k for k, v in legacy.items() if v == user_id]
     for key in user_legacy_keys:
-        # 匹配: key == exchange_type, key 以 exchange_type 开头, 或 key 包含 _exchange_type
-        if key == exchange_type or key.startswith(exchange_type) or f"_{exchange_type}" in key:
+        if f"_{exchange_type}" in key:
             return key
 
-    # 如果没找到，返回交易所类型作为默认值
-    return exchange_type
+    # 默认返回标准格式
+    return ec2_key
 
 
 # ===================== SSH 执行 =====================
@@ -395,24 +396,28 @@ def detect_address_type(address: str) -> str:
 
 # ===================== 兼容旧接口 (保留给其他模块使用) =====================
 
-# 旧的交易所列表 (为了兼容)
-EXCHANGES = [
-    ("dennis_binance", "BINANCE - Dennis"),
-    ("vanie_binance", "BINANCE - Vanie"),
-    ("baiqing_binance", "BINANCE - 柏青"),
-    ("dennis_bybit", "BYBIT"),
-    ("dennis_gate", "GATE.IO"),
-    ("dennis_bitget", "BITGET"),
-    ("dennis_hyperliquid", "HYPERLIQUID"),
-]
+def _build_exchanges_list():
+    """从配置文件动态构建交易所列表"""
+    config = load_config()
+    exchanges = []
+    for user_id, user_data in config.get("users", {}).items():
+        user_name = user_data.get("name", user_id)
+        for account_id, acc in user_data.get("accounts", {}).items():
+            exchange_type = acc.get("exchange", account_id)
+            ec2_key = f"{user_id}_{exchange_type}"
+            display = f"{exchange_type.upper()} - {user_name}"
+            exchanges.append((ec2_key, display))
+    return exchanges
+
+EXCHANGES = _build_exchanges_list()
 
 
 def select_exchange(allow_back: bool = True, binance_only: bool = False, bybit_only: bool = False):
     """选择交易所 (旧接口，兼容用)"""
     if binance_only:
-        options = [(k, n) for k, n in EXCHANGES if k.startswith("binance")]
+        options = [(k, n) for k, n in EXCHANGES if "_binance" in k]
     elif bybit_only:
-        options = [(k, n) for k, n in EXCHANGES if k.startswith("bybit")]
+        options = [(k, n) for k, n in EXCHANGES if "_bybit" in k]
     else:
         options = EXCHANGES
 

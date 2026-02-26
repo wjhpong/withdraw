@@ -205,7 +205,7 @@ def do_withdraw(exchange: str = None, user_id: str = None):
 
         if addr_type in evm_types:
             # EVM 兼容地址，让用户选择网络
-            evm_networks = ["ERC20", "BSC", "ARBITRUM", "OPTIMISM", "MATIC", "AVAXC", "BASE", "LINEA", "MANTLE", "SONIC"]
+            evm_networks = ["ETH", "BSC", "ARBITRUM", "OPTIMISM", "MATIC", "AVAXC", "BASE", "LINEA", "MANTLE", "SONIC"]
             net_idx = select_option("请选择提现网络:", evm_networks, allow_back=True)
             if net_idx == -1:
                 return
