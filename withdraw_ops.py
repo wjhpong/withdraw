@@ -2,6 +2,7 @@
 """提现操作"""
 
 import time
+from decimal import Decimal, ROUND_DOWN, InvalidOperation
 from utils import run_on_ec2, select_option, select_exchange, get_exchange_base, get_exchange_display_name, input_amount, get_networks_for_type, get_networks_for_coin, detect_address_type, SSHError
 from addresses import load_addresses, load_user_addresses
 from balance import get_coin_balance
@@ -10,6 +11,26 @@ from balance import get_coin_balance
 class WithdrawError(Exception):
     """提现操作错误"""
     pass
+
+
+def _format_amount_for_transfer(amount: float, decimals: int = 6) -> str:
+    """按精度向下截断金额，避免交易所精度报错"""
+    try:
+        q = Decimal(1).scaleb(-decimals)  # 10^-decimals
+        value = Decimal(str(amount)).quantize(q, rounding=ROUND_DOWN)
+        return format(value.normalize(), "f")
+    except (InvalidOperation, ValueError, TypeError):
+        return "0"
+
+
+def _looks_like_error(output: str) -> bool:
+    text = (output or "").lower()
+    return (
+        "error" in text
+        or "失败" in output
+        or "permission denied" in text
+        or "accuracy err" in text
+    )
 
 
 def do_withdraw(exchange: str = None, user_id: str = None):
@@ -286,14 +307,18 @@ def do_withdraw(exchange: str = None, user_id: str = None):
                     transfer_amount = required_amount - fund_balance
                     if transfer_amount > unified_balance:
                         transfer_amount = unified_balance
+                    transfer_amount_str = _format_amount_for_transfer(transfer_amount, decimals=6)
 
                     print(f"\n⚠️  资金账户余额不足 ({fund_balance} {coin})，需要约 {required_amount} {coin}（含手续费）")
                     print(f"   统一账户余额: {unified_balance} {coin}")
-                    print(f"   正在从统一账户划转 {transfer_amount} {coin} 到资金账户...")
+                    print(f"   正在从统一账户划转 {transfer_amount_str} {coin} 到资金账户...")
 
-                    transfer_result = run_on_ec2(f"transfer {exchange} UNIFIED FUND {coin} {transfer_amount}")
-                    print(transfer_result)
-                    time.sleep(1)
+                    if float(transfer_amount_str) > 0:
+                        transfer_result = run_on_ec2(f"transfer {exchange} UNIFIED FUND {coin} {transfer_amount_str}")
+                        print(transfer_result)
+                        if _looks_like_error(transfer_result):
+                            print("⚠️  自动划转失败，将继续按当前资金账户余额尝试提现")
+                        time.sleep(1)
 
         elif exchange_base == "binance":
             # Binance: 查询现货账户余额
@@ -324,6 +349,14 @@ def do_withdraw(exchange: str = None, user_id: str = None):
     except ValueError as e:
         print(f"❌ 余额解析错误: {e}")
         return
+
+    # 自动划转后再次检查资金账户余额，至少要覆盖提现数量
+    if exchange_base == "bybit":
+        latest_fund_balance = float(get_coin_balance(exchange, coin, "FUND") or 0)
+        if latest_fund_balance < float(amount):
+            print(f"❌ 资金账户余额不足: 当前 {latest_fund_balance} {coin}，提现需要 {amount} {coin}")
+            print("   请先手动划转到资金账户后重试")
+            return
 
     # 确认
     display_name = get_exchange_display_name(exchange)
@@ -357,7 +390,9 @@ def do_withdraw(exchange: str = None, user_id: str = None):
 
         # 检查常见错误
         output_lower = output.lower()
-        if "error" in output_lower or "failed" in output_lower or "失败" in output:
+        if "permission denied" in output_lower:
+            print("\n❌ 提现权限不足：请在 Bybit API 设置中开启 Withdraw 权限，并确认 IP 白名单包含 EC2 出口 IP")
+        elif "error" in output_lower or "failed" in output_lower or "失败" in output:
             print("\n⚠️  提现可能失败，请检查交易所确认")
         elif "success" in output_lower or "成功" in output:
             print("\n✅ 提现请求已提交")

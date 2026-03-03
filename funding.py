@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """资金费率查询"""
 
+import json
 import requests
+import subprocess
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from utils import run_on_ec2, select_option, SSHError
+from utils import run_on_ec2, select_option, SSHError, load_config, get_ssh_config
 
 BINANCE_BASE = "https://fapi.binance.com"
 ASTER_BASE = "https://fapi.asterdex.com"
 HYPERLIQUID_BASE = "https://api.hyperliquid.xyz"
 LIGHTER_BASE = "https://mainnet.zklighter.elliot.ai"
+BYBIT_BASE = "https://api.bybit.com"
 
 
 def get_hyperliquid_funding_history(coin: str, days: int = 7):
@@ -543,6 +546,351 @@ def show_binance_funding_history(exchange: str = None):
     print(f"📈 日均收入: {avg_daily:>+,.4f} USDT")
     print(f"📅 年化收入: {avg_daily * 365:>+,.2f} USDT")
     print("=" * 80)
+
+
+def get_bybit_funding_history(symbol: str, days: int = 7):
+    """查询 Bybit 历史资金费率（公共接口）"""
+    symbol = symbol.upper()
+    if not symbol.endswith("USDT"):
+        symbol += "USDT"
+
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    start_ms = int((now - timedelta(days=days)).timestamp() * 1000)
+    end_ms = int(now.timestamp() * 1000)
+
+    url = f"{BYBIT_BASE}/v5/market/funding/history"
+    limit = min(max(days * 4 + 10, 20), 200)
+    params = {
+        "category": "linear",
+        "symbol": symbol,
+        "startTime": start_ms,
+        "endTime": end_ms,
+        "limit": limit
+    }
+
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        if resp.status_code != 200:
+            print(f"API 错误: {resp.status_code}")
+            return []
+        data = resp.json()
+        if data.get("retCode") != 0:
+            print(f"API 错误: {data.get('retMsg', data.get('retCode'))}")
+            return []
+        return data.get("result", {}).get("list", [])
+    except Exception as e:
+        print(f"请求失败: {e}")
+        return []
+
+
+def show_bybit_funding_history(exchange: str = None):
+    """显示 Bybit 历史资金费率（若后端支持则附带实际收入）"""
+    import json
+
+    symbol = input("\n请输入交易对 (如 BTC, BTCUSDT，回车查询全部): ").strip().upper()
+
+    days_str = input("查询天数 (默认7天): ").strip()
+    days = int(days_str) if days_str.isdigit() else 7
+
+    print(f"\n正在查询 Bybit 资金费数据...")
+
+    # 留空时：按“用户开仓过的交易对”汇总
+    if not symbol:
+        if not exchange:
+            print("未提供账户信息，请输入具体交易对查询")
+            return
+
+        user_records = []
+        has_income_data = False
+        try:
+            output = run_on_ec2(f'bybit_funding_income {exchange} "" {days}')
+            maybe = json.loads(output.strip())
+            if isinstance(maybe, dict) and "error" in maybe:
+                maybe = []
+            if isinstance(maybe, list):
+                user_records = maybe
+                has_income_data = True
+        except Exception:
+            user_records = []
+
+        traded_symbols = set()
+        for r in user_records:
+            sym = str(r.get("symbol", "")).upper()
+            if sym:
+                traded_symbols.add(sym)
+
+        # 兜底：如果资金费命令不可用，则用 Bybit 私有 execution/list 获取交易过的 symbol
+        if not traded_symbols:
+            symbols_from_exec, exec_error = get_bybit_traded_symbols_via_ec2(exchange, days)
+            if exec_error:
+                print(f"自动获取开仓币种失败: {exec_error}")
+                print("请输入具体交易对（如 BTC）查询")
+                return
+            traded_symbols = set(symbols_from_exec)
+
+        if not traded_symbols:
+            print(f"最近 {days} 天没有检测到资金费记录")
+            return
+
+        symbols = sorted(traded_symbols)
+        print(f"检测到你开仓过的交易对: {len(symbols)} 个，正在统计最近 {days} 天费率...")
+
+        rows = []
+        total_income = 0.0
+        income_by_symbol = {}
+        if has_income_data:
+            for r in user_records:
+                sym = str(r.get("symbol", "")).upper()
+                income = float(r.get("income", 0) or r.get("funding", 0) or 0)
+                if not sym:
+                    continue
+                income_by_symbol[sym] = income_by_symbol.get(sym, 0.0) + income
+                total_income += income
+
+        for idx, sym in enumerate(symbols, 1):
+            rate_records = get_bybit_funding_history(sym, days)
+            if not rate_records:
+                continue
+            total_rate = 0.0
+            for record in rate_records:
+                total_rate += float(record.get("fundingRate", 0))
+            count = len(rate_records)
+            avg_rate = total_rate / count if count > 0 else 0
+            annual_avg = avg_rate * 3 * 365 * 100  # 8小时一次，日均约3次
+            rows.append({
+                "symbol": sym,
+                "count": count,
+                "total_rate": total_rate,
+                "annual_avg": annual_avg,
+                "income": income_by_symbol.get(sym, 0.0)
+            })
+            if idx % 20 == 0:
+                print(f"  已处理 {idx}/{len(symbols)}...")
+
+        if not rows:
+            print("没有历史费率数据")
+            return
+
+        rows.sort(key=lambda x: abs(x["total_rate"]), reverse=True)
+
+        print(f"\n{'=' * 80}")
+        print(f"  Bybit 历史资金费率汇总 (你的交易对, 最近 {days} 天)")
+        print("=" * 80)
+        if has_income_data:
+            print(f"{'交易对':<14} {'结算次数':<10} {'累计费率':<14} {'平均年化':<12} {'收入(USDT)':<12}")
+        else:
+            print(f"{'交易对':<14} {'结算次数':<10} {'累计费率':<14} {'平均年化':<12}")
+        print("-" * 80)
+        for r in rows:
+            if has_income_data:
+                print(f"{r['symbol']:<14} {r['count']:<10} {r['total_rate']*100:>+,.4f}%      {r['annual_avg']:>+,.2f}%    {r['income']:>+,.4f}")
+            else:
+                print(f"{r['symbol']:<14} {r['count']:<10} {r['total_rate']*100:>+,.4f}%      {r['annual_avg']:>+,.2f}%")
+        print("-" * 80)
+        total_abs = sum(abs(r["total_rate"]) for r in rows)
+        print(f"交易对数量: {len(rows)}")
+        print(f"累计费率绝对值合计: {total_abs*100:,.4f}%")
+        if has_income_data:
+            print(f"资金费收入合计: {total_income:+,.4f} USDT")
+        else:
+            print("注: 当前环境未提供 bybit_funding_income，收入列暂不可用")
+        print("=" * 80)
+        return
+
+    if not symbol.endswith("USDT"):
+        symbol = symbol + "USDT"
+
+    # 1) 历史费率（公共接口）
+    rate_records = get_bybit_funding_history(symbol, days)
+    if not rate_records:
+        print("没有历史费率数据")
+        return
+
+    # 2) 尝试获取用户实际收入（EC2 后端未实现时会自动忽略）
+    income_records = []
+    if exchange:
+        try:
+            output = run_on_ec2(f'bybit_funding_income {exchange} {symbol} {days}')
+            maybe = json.loads(output.strip())
+            if isinstance(maybe, list):
+                income_records = maybe
+        except Exception:
+            pass
+
+    # 按日期聚合费率
+    daily_rate = {}
+    for record in rate_records:
+        ts = int(record.get("fundingRateTimestamp", 0))
+        rate = float(record.get("fundingRate", 0))
+        if ts <= 0:
+            continue
+        dt = datetime.fromtimestamp(ts / 1000, tz=ZoneInfo("Asia/Shanghai"))
+        date_str = dt.strftime("%Y-%m-%d")
+        if date_str not in daily_rate:
+            daily_rate[date_str] = {"count": 0, "sum": 0.0}
+        daily_rate[date_str]["count"] += 1
+        daily_rate[date_str]["sum"] += rate
+
+    # 按日期聚合收入（如果有）
+    daily_income = {}
+    for r in income_records:
+        ts = int(r.get("time", 0) or r.get("execTime", 0) or 0)
+        income = float(r.get("income", 0) or r.get("funding", 0) or 0)
+        if ts <= 0:
+            continue
+        dt = datetime.fromtimestamp(ts / 1000, tz=ZoneInfo("Asia/Shanghai"))
+        date_str = dt.strftime("%Y-%m-%d")
+        daily_income[date_str] = daily_income.get(date_str, 0.0) + income
+
+    print(f"\n{'=' * 80}")
+    print(f"  Bybit 历史资金费率 ({symbol}, 最近 {days} 天)")
+    print("=" * 80)
+    if daily_income:
+        print(f"{'日期':<12} {'次数':<6} {'累计费率':<12} {'年化费率':<12} {'收入(USDT)':<12}")
+    else:
+        print(f"{'日期':<12} {'次数':<6} {'累计费率':<12} {'年化费率':<12}")
+    print("-" * 80)
+
+    total_rate = 0.0
+    total_income = 0.0
+    for date_str in sorted(daily_rate.keys(), reverse=True):
+        stats = daily_rate[date_str]
+        day_rate = stats["sum"]
+        annual_rate = day_rate * 365 * 100
+        total_rate += day_rate
+
+        if daily_income:
+            day_income = daily_income.get(date_str, 0.0)
+            total_income += day_income
+            print(f"{date_str:<12} {stats['count']:<6} {day_rate*100:>+.4f}%     {annual_rate:>+.2f}%      {day_income:>+,.4f}")
+        else:
+            print(f"{date_str:<12} {stats['count']:<6} {day_rate*100:>+.4f}%     {annual_rate:>+.2f}%")
+
+    print("-" * 80)
+    avg_daily_rate = total_rate / len(daily_rate) if daily_rate else 0
+    annual_avg = avg_daily_rate * 365 * 100
+    if daily_income:
+        print(f"{'小计':<12} {'':<6} {total_rate*100:>+.4f}%     {annual_avg:>+.2f}%      {total_income:>+,.4f}")
+    else:
+        print(f"{'小计':<12} {'':<6} {total_rate*100:>+.4f}%     {annual_avg:>+.2f}%")
+        print("注: 当前仅展示历史费率；实际资金费收入需 EC2 端支持 bybit_funding_income 命令")
+    print("=" * 80)
+
+
+def get_bybit_traded_symbols_via_ec2(exchange: str, days: int = 7):
+    """通过 EC2 出口 IP 调用 Bybit 私有接口，获取近 N 天交易过的 symbol"""
+    try:
+        config = load_config()
+        legacy = config.get("_legacy", {})
+        user_id = legacy.get(exchange)
+        if not user_id:
+            if "_" in exchange:
+                user_id = exchange.split("_", 1)[0]
+            else:
+                return [], "无法从 exchange 推断用户"
+
+        user = config.get("users", {}).get(user_id, {})
+        bybit_cfg = user.get("accounts", {}).get("bybit", {})
+        api_key = bybit_cfg.get("api_key")
+        api_secret = bybit_cfg.get("api_secret")
+        if not api_key or not api_secret:
+            return [], "Bybit API 凭证未配置"
+
+        ssh_host, ssh_user, ssh_hostname, ssh_port, ssh_key = get_ssh_config()
+        if ssh_hostname:
+            target = f"{ssh_user}@{ssh_hostname}" if ssh_user else ssh_hostname
+        else:
+            target = ssh_host
+
+        ssh_cmd = ["ssh"]
+        if ssh_key:
+            ssh_cmd.extend(["-i", ssh_key])
+        if ssh_port and ssh_hostname:
+            ssh_cmd.extend(["-p", str(ssh_port)])
+        ssh_cmd.extend([target, "python3", "-", api_key, api_secret, str(days)])
+
+        script = r"""
+import sys, time, hmac, hashlib, json, urllib.request, urllib.parse
+api_key = sys.argv[1]
+api_secret = sys.argv[2]
+days = int(sys.argv[3])
+cutoff = int((time.time() - days * 24 * 3600) * 1000)
+
+def signed_get(path, params):
+    qs = "&".join(f"{k}={urllib.parse.quote(str(params[k]))}" for k in sorted(params))
+    ts = str(int(time.time() * 1000))
+    recv = "5000"
+    sign = hmac.new(api_secret.encode(), (ts + api_key + recv + qs).encode(), hashlib.sha256).hexdigest()
+    req = urllib.request.Request(
+        "https://api.bybit.com" + path + "?" + qs,
+        headers={
+            "X-BAPI-API-KEY": api_key,
+            "X-BAPI-TIMESTAMP": ts,
+            "X-BAPI-SIGN": sign,
+            "X-BAPI-RECV-WINDOW": recv,
+        },
+    )
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+symbols = set()
+cursor = ""
+max_pages = 15
+for _ in range(max_pages):
+    params = {"category": "linear", "limit": "100"}
+    if cursor:
+        params["cursor"] = cursor
+    data = signed_get("/v5/execution/list", params)
+    if data.get("retCode") != 0:
+        print(json.dumps({"error": data.get("retMsg", data.get("retCode"))}))
+        sys.exit(0)
+    result = data.get("result", {})
+    rows = result.get("list", [])
+    if not rows:
+        break
+
+    stop = False
+    for row in rows:
+        exec_time = int(row.get("execTime", 0) or 0)
+        sym = str(row.get("symbol", "")).upper()
+        if exec_time and exec_time < cutoff:
+            stop = True
+            break
+        if sym.endswith("USDT"):
+            symbols.add(sym)
+
+    if stop:
+        break
+    cursor = result.get("nextPageCursor", "")
+    if not cursor:
+        break
+
+print(json.dumps({"symbols": sorted(symbols)}))
+"""
+        result = subprocess.run(
+            ssh_cmd,
+            input=script,
+            capture_output=True,
+            text=True,
+            timeout=90
+        )
+
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout).strip()
+            return [], err or "SSH 执行失败"
+
+        out = (result.stdout or "").strip()
+        if not out:
+            return [], "空响应"
+
+        data = json.loads(out.splitlines()[-1])
+        if isinstance(data, dict) and data.get("error"):
+            return [], str(data["error"])
+
+        symbols = data.get("symbols", []) if isinstance(data, dict) else []
+        return symbols, None
+    except Exception as e:
+        return [], str(e)
 
 
 def get_lighter_markets():
