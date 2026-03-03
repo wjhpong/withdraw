@@ -1127,6 +1127,46 @@ def market_sell_spot(exchange: str, symbol: str, qty: float) -> bool:
         return False
 
 
+def buy_gt(exchange: str):
+    """Gate 市价买入 GT"""
+    display_name = get_exchange_display_name(exchange)
+    print(f"\n=== {display_name} - 买入 GT ===")
+
+    amount = input_amount("请输入花费的 USDT 数量:")
+    if amount is None:
+        return
+
+    confirm = select_option(f"确认用 {amount} USDT 市价买入 GT?", ["确认", "取消"])
+    if confirm != 0:
+        print("已取消")
+        return
+
+    print("\n正在下单...")
+    try:
+        output = run_on_ec2(f"gate_market_buy {exchange} GT_USDT {amount}")
+        result = json.loads(output.strip())
+        if isinstance(result, dict) and 'id' in result:
+            print(f"  ✅ 下单成功!")
+            print(f"  订单ID: {result['id']}")
+            fill_price = result.get('fill_price', result.get('avg_deal_price', ''))
+            if fill_price:
+                print(f"  成交均价: {fill_price}")
+            left = result.get('left', '')
+            amount_field = result.get('amount', '')
+            if amount_field and left:
+                filled = float(amount_field) - float(left)
+                if filled > 0:
+                    print(f"  花费 USDT: {filled}")
+        elif isinstance(result, dict) and ('message' in result or 'error' in result):
+            print(f"  ❌ 下单失败: {result.get('message', result.get('error', result))}")
+        else:
+            print(f"  返回: {result}")
+    except json.JSONDecodeError:
+        print(output)
+    except SSHError as e:
+        print(f"  ❌ 下单失败: {e}")
+
+
 def market_sell_menu(exchange: str):
     """市价卖出菜单"""
     exchange_base = get_exchange_base(exchange)

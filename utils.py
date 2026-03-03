@@ -354,6 +354,56 @@ def get_exchange_base(exchange: str) -> str:
     return exchange
 
 
+def get_bybit_api_keys(exchange: str):
+    """从配置中获取 Bybit API 密钥，返回 (api_key, api_secret) 或 (None, None)"""
+    config = load_config()
+    legacy = config.get("_legacy", {})
+    user_id = legacy.get(exchange)
+    if not user_id:
+        user_id = exchange.split("_", 1)[0] if "_" in exchange else exchange
+    user_cfg = config.get("users", {}).get(user_id, {})
+    bybit_cfg = user_cfg.get("accounts", {}).get("bybit", {})
+    return bybit_cfg.get("api_key"), bybit_cfg.get("api_secret")
+
+
+def run_bybit_api_script(exchange: str, script: str, extra_args: list = None, timeout: int = 60) -> str:
+    """通过 SSH 在 EC2 上执行 Bybit API 脚本，返回 stdout。
+
+    脚本中可通过 sys.argv[1], sys.argv[2] 获取 api_key, api_secret。
+    extra_args 中的参数从 sys.argv[3] 开始。
+    """
+    api_key, api_secret = get_bybit_api_keys(exchange)
+    if not api_key or not api_secret:
+        raise SSHError("Bybit API 凭证未配置")
+
+    ssh_host, ssh_user, ssh_hostname, ssh_port, ssh_key = get_ssh_config()
+    if ssh_hostname:
+        target = f"{ssh_user}@{ssh_hostname}" if ssh_user else ssh_hostname
+    else:
+        target = ssh_host
+
+    ssh_cmd = ["ssh"]
+    if not is_windows():
+        socket_path = get_control_socket_path()
+        ensure_ssh_connection()
+        ssh_cmd.extend(["-o", f"ControlPath={socket_path}"])
+    if ssh_key:
+        ssh_cmd.extend(["-i", ssh_key])
+    if ssh_port and ssh_hostname:
+        ssh_cmd.extend(["-p", str(ssh_port)])
+    ssh_cmd.append(target)
+
+    cmd_args = ["python3", "-", api_key, api_secret]
+    if extra_args:
+        cmd_args.extend([str(a) for a in extra_args])
+    ssh_cmd.extend(cmd_args)
+
+    result = subprocess.run(ssh_cmd, input=script, capture_output=True, text=True, timeout=timeout)
+    if result.returncode != 0:
+        raise SSHError((result.stderr or "SSH 执行失败").strip()[:200])
+    return result.stdout.strip()
+
+
 def get_exchange_display_name(exchange: str, user_name: str = None) -> str:
     """获取交易所的显示名称"""
     base = get_exchange_base(exchange).upper()

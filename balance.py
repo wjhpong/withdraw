@@ -2,10 +2,11 @@
 """余额查询"""
 
 import json
+import subprocess
 import requests
 from utils import (run_on_ec2, select_option, select_exchange, get_exchange_base,
                    get_exchange_display_name, get_user_accounts, get_ec2_exchange_key,
-                   load_config, SSHError)
+                   load_config, SSHError, get_ssh_config, run_bybit_api_script)
 
 # 稳定币列表，价格视为 1 USD
 STABLECOINS = ['USDT', 'USDC', 'USD1', 'BUSD', 'TUSD', 'FDUSD']
@@ -124,6 +125,125 @@ def show_pm_ratio(exchange: str = None):
 
     output = run_on_ec2(f"pm_ratio {exchange}")
     print(output)
+
+
+def show_bybit_margin_ratio(exchange: str = None):
+    """查询 Bybit 统一账户保证金率"""
+    if not exchange:
+        exchange = select_exchange(bybit_only=True)
+        if not exchange:
+            return
+
+    display_name = get_exchange_display_name(exchange)
+    print(f"\n正在查询 {display_name} 统一保证金率...")
+
+    from funding import _BYBIT_SIGNED_GET_SCRIPT
+    script = _BYBIT_SIGNED_GET_SCRIPT + r"""
+import sys
+
+# 查询统一账户钱包余额
+data = signed_get("/v5/account/wallet-balance", {"accountType": "UNIFIED"})
+if data.get("retCode") != 0:
+    print(json.dumps({"error": data.get("retMsg", str(data.get("retCode")))}))
+    sys.exit(0)
+
+accounts = data.get("result", {}).get("list", [])
+if not accounts:
+    print(json.dumps({"error": "无账户数据"}))
+    sys.exit(0)
+
+acc = accounts[0]
+result = {
+    "totalEquity": acc.get("totalEquity", "0"),
+    "totalMarginBalance": acc.get("totalMarginBalance", "0"),
+    "totalInitialMargin": acc.get("totalInitialMargin", "0"),
+    "totalMaintenanceMargin": acc.get("totalMaintenanceMargin", "0"),
+    "totalAvailableBalance": acc.get("totalAvailableBalance", "0"),
+    "totalPerpUPL": acc.get("totalPerpUPL", "0"),
+    "accountIMRate": acc.get("accountIMRate", "0"),
+    "accountMMRate": acc.get("accountMMRate", "0"),
+}
+
+# 查询持仓
+pos_data = signed_get("/v5/position/list", {"category": "linear", "limit": "200", "settleCoin": "USDT"})
+positions = []
+if pos_data.get("retCode") == 0:
+    for p in pos_data.get("result", {}).get("list", []):
+        size = float(p.get("size", 0))
+        if size == 0:
+            continue
+        positions.append({
+            "symbol": p.get("symbol", ""),
+            "side": p.get("side", ""),
+            "size": p.get("size", "0"),
+            "positionValue": p.get("positionValue", "0"),
+            "leverage": p.get("leverage", "0"),
+            "markPrice": p.get("markPrice", "0"),
+            "unrealisedPnl": p.get("unrealisedPnl", "0"),
+            "liqPrice": p.get("liqPrice", ""),
+        })
+
+result["positions"] = positions
+print(json.dumps(result))
+"""
+
+    try:
+        output = run_bybit_api_script(exchange, script)
+        data = json.loads(output)
+        if "error" in data:
+            print(f"查询失败: {data['error']}")
+            return
+
+        equity = float(data.get("totalEquity", 0))
+        margin_bal = float(data.get("totalMarginBalance", 0))
+        init_margin = float(data.get("totalInitialMargin", 0))
+        maint_margin = float(data.get("totalMaintenanceMargin", 0))
+        avail_bal = float(data.get("totalAvailableBalance", 0))
+        perp_upl = float(data.get("totalPerpUPL", 0))
+        im_rate = float(data.get("accountIMRate", 0)) * 100
+        mm_rate = float(data.get("accountMMRate", 0)) * 100
+
+        print(f"\n{'=' * 55}")
+        print(f"  {display_name} 统一账户概览")
+        print(f"{'=' * 55}")
+        print(f"  账户权益:     ${equity:>12,.2f} USD")
+        print(f"  保证金余额:   ${margin_bal:>12,.2f} USD")
+        print(f"  可用余额:     ${avail_bal:>12,.2f} USD")
+        print(f"  初始保证金:   ${init_margin:>12,.2f} USD")
+        print(f"  维持保证金:   ${maint_margin:>12,.2f} USD")
+        print(f"  未实现盈亏:   ${perp_upl:>+12,.2f} USD")
+        print(f"  初始保证金率: {im_rate:>8.2f}%")
+        print(f"  维持保证金率: {mm_rate:>8.2f}%", end="  ")
+        if mm_rate < 30:
+            print("安全")
+        elif mm_rate < 60:
+            print("注意")
+        elif mm_rate < 80:
+            print("警告")
+        else:
+            print("危险")
+
+        positions = data.get("positions", [])
+        if positions:
+            positions.sort(key=lambda x: abs(float(x.get("positionValue", 0))), reverse=True)
+            print(f"\n{'─' * 55}")
+            print(f"  持仓明细 ({len(positions)} 个)")
+            print(f"{'─' * 55}")
+            for p in positions:
+                symbol = p["symbol"].replace("USDT", "")
+                side = "多" if p["side"] == "Buy" else "空"
+                value = float(p.get("positionValue", 0))
+                leverage = p.get("leverage", "?")
+                upl = float(p.get("unrealisedPnl", 0))
+                liq = p.get("liqPrice", "")
+                liq_str = f"强平: {float(liq):.4f}" if liq else "强平: --"
+                print(f"  {symbol:<10} [{side}] {leverage}x  价值: ${value:>10,.2f}  盈亏: ${upl:>+8,.2f}  {liq_str}")
+
+        print(f"{'=' * 55}")
+    except SSHError as e:
+        print(f"查询失败: {e}")
+    except Exception as e:
+        print(f"查询失败: {e}")
 
 
 def show_gate_subaccounts():
@@ -600,6 +720,43 @@ def _show_position_distribution(user_id: str, accounts: list):
                                     all_positions.append((symbol, notional))
                                     break
             except (SSHError, ValueError):
+                pass
+
+        # Bybit - 通过 EC2 出口 IP 调用 V5 API 查询持仓
+        elif exchange_base == "bybit":
+            try:
+                from funding import _BYBIT_SIGNED_GET_SCRIPT
+                script = _BYBIT_SIGNED_GET_SCRIPT + r"""
+positions = []
+cursor = ""
+for _ in range(10):
+    params = {"category": "linear", "limit": "200", "settleCoin": "USDT"}
+    if cursor:
+        params["cursor"] = cursor
+    data = signed_get("/v5/position/list", params)
+    if data.get("retCode") != 0:
+        break
+    result = data.get("result", {})
+    rows = result.get("list", [])
+    for row in rows:
+        size = float(row.get("size", 0))
+        if size == 0:
+            continue
+        symbol = row.get("symbol", "").replace("USDT", "")
+        mark_price = float(row.get("markPrice", 0))
+        notional = size * mark_price
+        positions.append({"symbol": symbol, "notional": notional})
+    cursor = result.get("nextPageCursor", "")
+    if not cursor:
+        break
+print(json.dumps(positions))
+"""
+                output = run_bybit_api_script(ec2_exchange, script)
+                if output:
+                    bybit_positions = json.loads(output)
+                    for p in bybit_positions:
+                        all_positions.append((p["symbol"], p["notional"]))
+            except Exception:
                 pass
 
     if not all_positions:
