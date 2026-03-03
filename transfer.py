@@ -10,19 +10,52 @@ class TransferError(Exception):
     pass
 
 
+def _show_bybit_unified_balances(exchange: str):
+    """显示 Bybit 统一账户常用币种余额"""
+    print("\n" + "=" * 50)
+    print("📦 统一账户余额 (UNIFIED):")
+    print("=" * 50)
+    common_coins = ["USDT", "USDC", "BTC", "ETH"]
+    has_balance = False
+    for coin in common_coins:
+        try:
+            output = run_on_ec2(f"account_balance {exchange} UNIFIED {coin}").strip()
+            if not output:
+                continue
+            bal = float(output)
+            if bal > 0:
+                has_balance = True
+                print(f"  {coin}: {bal:.8f}".rstrip("0").rstrip("."))
+        except (SSHError, ValueError):
+            continue
+
+    if not has_balance:
+        print("  统一账户暂无余额")
+
+
 def _show_binance_sub_assets(exchange: str, sub_email: str):
     """查询并显示 Binance 子账户资产"""
     try:
         bal_output = run_on_ec2(f"binance_subaccount_assets {exchange} {sub_email}")
         try:
-            assets = json.loads(bal_output.strip())
+            parsed = json.loads(bal_output.strip())
+            # 兼容不同返回格式：可能是 {"balances": [...]} 或直接 [...]
+            if isinstance(parsed, dict):
+                assets = parsed.get('balances', parsed.get('assets', []))
+            elif isinstance(parsed, list):
+                assets = parsed
+            else:
+                assets = []
             if assets:
                 print(f"\n子账户 [{sub_email}] 资产:")
                 for asset in assets:
-                    asset_name = asset.get('asset', '')
-                    free = float(asset.get('free', 0))
-                    if free > 0:
-                        print(f"  {asset_name}: {free:,.4f}")
+                    if isinstance(asset, dict):
+                        asset_name = asset.get('asset', '')
+                        free = float(asset.get('free', 0))
+                        if free > 0:
+                            print(f"  {asset_name}: {free:,.4f}")
+                    else:
+                        print(f"  {asset}")
             else:
                 print("  (无资产)")
         except json.JSONDecodeError:
@@ -423,8 +456,11 @@ def do_transfer(exchange: str = None):
 
     # 显示源账户余额
     print(f"\n正在查询 {from_type} 账户余额...")
-    output = run_on_ec2(f"balance {exchange}")
-    print(output)
+    if exchange_base == "bybit" and from_type == "UNIFIED":
+        _show_bybit_unified_balances(exchange)
+    else:
+        output = run_on_ec2(f"balance {exchange}")
+        print(output)
 
     # Binance PM 划转时显示最大可划转金额
     if exchange_base == "binance" and from_type == "PORTFOLIO_MARGIN":
