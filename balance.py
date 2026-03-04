@@ -787,12 +787,10 @@ print(json.dumps(positions))
         bar_len = int(notional / max_notional * BAR_MAX_LEN)
         bar = "█" * bar_len
         # 格式化数量
-        if qty >= 1000000:
-            qty_str = f"{qty/1000000:.2f}M"
-        elif qty >= 1000:
-            qty_str = f"{qty/1000:.1f}K"
+        if qty == int(qty):
+            qty_str = f"{int(qty):,}"
         elif qty >= 1:
-            qty_str = f"{qty:.1f}"
+            qty_str = f"{qty:,.1f}"
         else:
             qty_str = f"{qty:.4f}"
         print(f"  {symbol:>10} {bar:<{BAR_MAX_LEN}}  $ {notional:>12,.2f} ({pct:>5.1f}%)  x{qty_str}")
