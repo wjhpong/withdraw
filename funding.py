@@ -584,178 +584,129 @@ def get_bybit_funding_history(symbol: str, days: int = 7):
 
 
 def show_bybit_funding_history(exchange: str = None):
-    """显示 Bybit 历史资金费率（若后端支持则附带实际收入）"""
+    """显示 Bybit 历史资金费率和实际收入"""
     import json
 
-    symbol = input("\n请输入交易对 (如 BTC, BTCUSDT，回车查询全部): ").strip().upper()
+    symbol = input("\n请输入交易对 (如 BTC, BTCUSDT, 直接回车查询全部): ").strip().upper()
 
     days_str = input("查询天数 (默认7天): ").strip()
     days = int(days_str) if days_str.isdigit() else 7
 
-    print(f"\n正在查询 Bybit 资金费数据...")
-
-    # 留空时：按“用户开仓过的交易对”汇总
-    if not symbol:
-        if not exchange:
-            print("未提供账户信息，请输入具体交易对查询")
-            return
-
-        user_records = get_bybit_funding_records(exchange, days)
-        has_income_data = len(user_records) > 0
-
-        traded_symbols = set()
-        for r in user_records:
-            sym = str(r.get("symbol", "")).upper()
-            if sym:
-                traded_symbols.add(sym)
-
-        # 兜底：如果资金费记录为空，则用 Bybit 私有 execution/list 获取交易过的 symbol
-        if not traded_symbols:
-            symbols_from_exec, exec_error = get_bybit_traded_symbols_via_ec2(exchange, days)
-            if exec_error:
-                print(f"自动获取开仓币种失败: {exec_error}")
-                print("请输入具体交易对（如 BTC）查询")
-                return
-            traded_symbols = set(symbols_from_exec)
-
-        if not traded_symbols:
-            print(f"最近 {days} 天没有检测到资金费记录")
-            return
-
-        symbols = sorted(traded_symbols)
-        print(f"检测到你开仓过的交易对: {len(symbols)} 个，正在统计最近 {days} 天费率...")
-
-        rows = []
-        total_income = 0.0
-        income_by_symbol = {}
-        if has_income_data:
-            for r in user_records:
-                sym = str(r.get("symbol", "")).upper()
-                funding = float(r.get("funding", 0))
-                if not sym:
-                    continue
-                income_by_symbol[sym] = income_by_symbol.get(sym, 0.0) + funding
-                total_income += funding
-
-        for idx, sym in enumerate(symbols, 1):
-            rate_records = get_bybit_funding_history(sym, days)
-            if not rate_records:
-                continue
-            total_rate = 0.0
-            for record in rate_records:
-                total_rate += float(record.get("fundingRate", 0))
-            count = len(rate_records)
-            avg_rate = total_rate / count if count > 0 else 0
-            annual_avg = avg_rate * 3 * 365 * 100  # 8小时一次，日均约3次
-            rows.append({
-                "symbol": sym,
-                "count": count,
-                "total_rate": total_rate,
-                "annual_avg": annual_avg,
-                "income": income_by_symbol.get(sym, 0.0)
-            })
-            if idx % 20 == 0:
-                print(f"  已处理 {idx}/{len(symbols)}...")
-
-        if not rows:
-            print("没有历史费率数据")
-            return
-
-        rows.sort(key=lambda x: abs(x["total_rate"]), reverse=True)
-
-        print(f"\n{'=' * 80}")
-        print(f"  Bybit 历史资金费率汇总 (你的交易对, 最近 {days} 天)")
-        print("=" * 80)
-        if has_income_data:
-            print(f"{'交易对':<14} {'结算次数':<10} {'累计费率':<14} {'平均年化':<12} {'收入(USDT)':<12}")
-        else:
-            print(f"{'交易对':<14} {'结算次数':<10} {'累计费率':<14} {'平均年化':<12}")
-        print("-" * 80)
-        for r in rows:
-            if has_income_data:
-                print(f"{r['symbol']:<14} {r['count']:<10} {r['total_rate']*100:>+,.4f}%      {r['annual_avg']:>+,.2f}%    {r['income']:>+,.4f}")
-            else:
-                print(f"{r['symbol']:<14} {r['count']:<10} {r['total_rate']*100:>+,.4f}%      {r['annual_avg']:>+,.2f}%")
-        print("-" * 80)
-        total_abs = sum(abs(r["total_rate"]) for r in rows)
-        print(f"交易对数量: {len(rows)}")
-        print(f"累计费率绝对值合计: {total_abs*100:,.4f}%")
-        if has_income_data:
-            print(f"资金费收入合计: {total_income:+,.4f} USDT")
-        print("=" * 80)
-        return
-
-    if not symbol.endswith("USDT"):
+    if symbol and not symbol.endswith("USDT"):
         symbol = symbol + "USDT"
 
-    # 1) 历史费率（公共接口）
-    rate_records = get_bybit_funding_history(symbol, days)
-    if not rate_records:
-        print("没有历史费率数据")
+    print(f"\n正在查询 Bybit 资金费数据...")
+
+    # 获取实际资金费收入
+    if not exchange:
+        print("未提供账户信息")
         return
 
-    # 2) 获取用户实际收入
-    income_records = []
-    if exchange:
-        all_records = get_bybit_funding_records(exchange, days)
+    all_records = get_bybit_funding_records(exchange, days)
+    if not all_records:
+        # 兜底: 尝试获取交易过的 symbol
+        symbols_from_exec, exec_error = get_bybit_traded_symbols_via_ec2(exchange, days)
+        if exec_error or not symbols_from_exec:
+            print("没有资金费收入记录")
+            return
+        print(f"检测到 {len(symbols_from_exec)} 个交易对, 但没有资金费结算记录")
+        return
+
+    # 筛选指定交易对
+    if symbol:
         income_records = [r for r in all_records if r.get("symbol", "").upper() == symbol]
+    else:
+        income_records = all_records
 
-    # 按日期聚合费率
-    daily_rate = {}
-    for record in rate_records:
-        ts = int(record.get("fundingRateTimestamp", 0))
-        rate = float(record.get("fundingRate", 0))
-        if ts <= 0:
-            continue
-        dt = datetime.fromtimestamp(ts / 1000, tz=ZoneInfo("Asia/Shanghai"))
-        date_str = dt.strftime("%Y-%m-%d")
-        if date_str not in daily_rate:
-            daily_rate[date_str] = {"count": 0, "sum": 0.0}
-        daily_rate[date_str]["count"] += 1
-        daily_rate[date_str]["sum"] += rate
+    if not income_records:
+        print("没有资金费收入记录")
+        return
 
-    # 按日期聚合收入（如果有）
-    daily_income = {}
-    for r in income_records:
-        ts = int(r.get("time", 0))
-        funding = float(r.get("funding", 0))
-        if ts <= 0:
-            continue
-        dt = datetime.fromtimestamp(ts / 1000, tz=ZoneInfo("Asia/Shanghai"))
+    # 获取费率数据
+    rate_data = {}
+    if symbol:
+        rate_records = get_bybit_funding_history(symbol, days)
+        for record in rate_records:
+            ts = int(record.get("fundingRateTimestamp", 0))
+            rate = float(record.get("fundingRate", 0))
+            dt = datetime.fromtimestamp(ts / 1000, tz=ZoneInfo("Asia/Shanghai"))
+            date_str = dt.strftime("%Y-%m-%d")
+            if date_str not in rate_data:
+                rate_data[date_str] = {"rates": [], "sum": 0}
+            rate_data[date_str]["rates"].append(rate)
+            rate_data[date_str]["sum"] += rate
+
+    # 按交易对和日期分组统计
+    symbol_daily_stats = {}
+    for record in income_records:
+        sym = record.get("symbol", "")
+        funding = float(record.get("funding", 0))
+        income_time = int(record.get("time", 0))
+
+        dt = datetime.fromtimestamp(income_time / 1000, tz=ZoneInfo("Asia/Shanghai"))
         date_str = dt.strftime("%Y-%m-%d")
-        daily_income[date_str] = daily_income.get(date_str, 0.0) + funding
+
+        if sym not in symbol_daily_stats:
+            symbol_daily_stats[sym] = {}
+
+        if date_str not in symbol_daily_stats[sym]:
+            symbol_daily_stats[sym][date_str] = {"incomes": [], "sum": 0}
+
+        symbol_daily_stats[sym][date_str]["incomes"].append(funding)
+        symbol_daily_stats[sym][date_str]["sum"] += funding
+
+    # 显示结果
+    print(f"\n{'=' * 80}")
+    print(f"  资金费收入 (最近 {days} 天)")
+    print("=" * 80)
+
+    grand_total = 0
+
+    for sym in sorted(symbol_daily_stats.keys()):
+        daily_stats = symbol_daily_stats[sym]
+
+        print(f"\n📊 {sym}")
+        print("-" * 75)
+
+        # 如果有费率数据, 显示费率列
+        if rate_data and sym == symbol:
+            print(f"{'日期':<12} {'次数':<6} {'累计费率':<12} {'年化费率':<12} {'收入(USDT)':<12}")
+        else:
+            print(f"{'日期':<12} {'结算次数':<8} {'收入(USDT)':<15}")
+        print("-" * 75)
+
+        sym_total = 0
+        total_rate = 0
+        for date_str in sorted(daily_stats.keys(), reverse=True):
+            stats = daily_stats[date_str]
+            count = len(stats["incomes"])
+            daily_sum = stats["sum"]
+            sym_total += daily_sum
+
+            if rate_data and sym == symbol and date_str in rate_data:
+                daily_rate = rate_data[date_str]["sum"]
+                total_rate += daily_rate
+                annual_rate = daily_rate * 365 * 100
+                print(f"{date_str:<12} {count:<6} {daily_rate*100:>+.4f}%     {annual_rate:>+.2f}%      {daily_sum:>+,.2f}")
+            else:
+                print(f"{date_str:<12} {count:<8} {daily_sum:>+,.4f}")
+
+        print("-" * 75)
+
+        if rate_data and sym == symbol:
+            avg_daily_rate = total_rate / len(daily_stats) if daily_stats else 0
+            annual_avg = avg_daily_rate * 365 * 100
+            print(f"{'小计':<12} {'':<6} {total_rate*100:>+.4f}%     {annual_avg:>+.2f}%      {sym_total:>+,.2f}")
+        else:
+            print(f"{'小计':<12} {'':<8} {sym_total:>+,.4f}")
+
+        grand_total += sym_total
 
     print(f"\n{'=' * 80}")
-    print(f"  Bybit 历史资金费率 ({symbol}, 最近 {days} 天)")
-    print("=" * 80)
-    if daily_income:
-        print(f"{'日期':<12} {'次数':<6} {'累计费率':<12} {'年化费率':<12} {'收入(USDT)':<12}")
-    else:
-        print(f"{'日期':<12} {'次数':<6} {'累计费率':<12} {'年化费率':<12}")
-    print("-" * 80)
-
-    total_rate = 0.0
-    total_income = 0.0
-    for date_str in sorted(daily_rate.keys(), reverse=True):
-        stats = daily_rate[date_str]
-        day_rate = stats["sum"]
-        annual_rate = day_rate * 365 * 100
-        total_rate += day_rate
-
-        if daily_income:
-            day_income = daily_income.get(date_str, 0.0)
-            total_income += day_income
-            print(f"{date_str:<12} {stats['count']:<6} {day_rate*100:>+.4f}%     {annual_rate:>+.2f}%      {day_income:>+,.4f}")
-        else:
-            print(f"{date_str:<12} {stats['count']:<6} {day_rate*100:>+.4f}%     {annual_rate:>+.2f}%")
-
-    print("-" * 80)
-    avg_daily_rate = total_rate / len(daily_rate) if daily_rate else 0
-    annual_avg = avg_daily_rate * 365 * 100
-    if daily_income:
-        print(f"{'小计':<12} {'':<6} {total_rate*100:>+.4f}%     {annual_avg:>+.2f}%      {total_income:>+,.4f}")
-    else:
-        print(f"{'小计':<12} {'':<6} {total_rate*100:>+.4f}%     {annual_avg:>+.2f}%")
+    print(f"💰 总收入: {grand_total:>+,.4f} USDT")
+    avg_daily = grand_total / days if days > 0 else 0
+    print(f"📈 日均收入: {avg_daily:>+,.4f} USDT")
+    print(f"📅 年化收入: {avg_daily * 365:>+,.2f} USDT")
     print("=" * 80)
 
 
