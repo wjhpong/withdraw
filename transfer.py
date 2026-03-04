@@ -53,7 +53,10 @@ def _show_binance_sub_assets(exchange: str, sub_email: str):
                         asset_name = asset.get('asset', '')
                         free = float(asset.get('free', 0))
                         if free > 0:
-                            print(f"  {asset_name}: {free:,.4f}")
+                            if asset_name == "BTC":
+                                print(f"  {asset_name}: {free:,.8f}")
+                            else:
+                                print(f"  {asset_name}: {free:,.4f}")
                     else:
                         print(f"  {asset}")
             else:
