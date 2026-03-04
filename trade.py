@@ -1127,6 +1127,41 @@ def market_sell_spot(exchange: str, symbol: str, qty: float) -> bool:
         return False
 
 
+def buy_bgb(exchange: str):
+    """Bitget 市价买入 BGB"""
+    display_name = get_exchange_display_name(exchange)
+    print(f"\n=== {display_name} - 买入 BGB ===")
+
+    amount = input_amount("请输入花费的 USDT 数量:")
+    if amount is None:
+        return
+
+    confirm = select_option(f"确认用 {amount} USDT 市价买入 BGB?", ["确认", "取消"])
+    if confirm != 0:
+        print("已取消")
+        return
+
+    print("\n正在下单...")
+    try:
+        output = run_on_ec2(f"bitget_market_buy {exchange} BGBUSDT {amount}")
+        result = json.loads(output.strip())
+        if isinstance(result, dict) and result.get("code") == "00000":
+            data = result.get("data", {})
+            print(f"  ✅ 下单成功!")
+            if isinstance(data, dict):
+                order_id = data.get("orderId", "")
+                if order_id:
+                    print(f"  订单ID: {order_id}")
+        elif isinstance(result, dict) and ("msg" in result or "message" in result):
+            print(f"  ❌ 下单失败: {result.get('msg', result.get('message', result))}")
+        else:
+            print(f"  返回: {result}")
+    except json.JSONDecodeError:
+        print(output)
+    except SSHError as e:
+        print(f"  ❌ 下单失败: {e}")
+
+
 def buy_gt(exchange: str):
     """Gate 市价买入 GT"""
     display_name = get_exchange_display_name(exchange)

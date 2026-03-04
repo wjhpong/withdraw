@@ -15,7 +15,7 @@ from lighter_ops import show_lighter_balance, show_lighter_margin_ratio
 from withdraw_ops import do_withdraw
 from transfer import do_transfer, do_binance_subaccount_transfer
 from earn import manage_earn
-from trade import do_stablecoin_trade, cancel_orders_menu, market_sell_menu, futures_close_menu, buy_gt
+from trade import do_stablecoin_trade, cancel_orders_menu, market_sell_menu, futures_close_menu, buy_gt, buy_bgb
 from addresses import manage_addresses
 from bnb_tools import manage_bnb_tools
 from funding import show_funding_rate, show_binance_funding_history, show_aster_funding_history, show_hyperliquid_funding_history, show_lighter_funding_history, show_bybit_funding_history, show_combined_funding_summary
@@ -117,6 +117,10 @@ def main():
                 if exchange_base == "gate":
                     options.append(("买入GT", lambda ex=ec2_exchange: buy_gt(ex)))
                     options.append(("子账户资产", lambda: show_gate_subaccounts()))
+
+                # Bitget 特有功能
+                if exchange_base == "bitget":
+                    options.append(("买入BGB", lambda ex=ec2_exchange: buy_bgb(ex)))
 
                 # Bybit 特有功能
                 if exchange_base == "bybit":
