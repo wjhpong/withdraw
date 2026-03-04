@@ -627,7 +627,7 @@ def _show_position_distribution(user_id: str, accounts: list):
     config = load_config()
     user_name = config.get("users", {}).get(user_id, {}).get("name", user_id)
 
-    all_positions = []  # [(symbol, notional), ...]
+    all_positions = []  # [(symbol, notional, quantity), ...]
 
     print(f"\n正在查询合约持仓...")
 
@@ -648,7 +648,7 @@ def _show_position_distribution(user_id: str, accounts: list):
                         symbol = p.get("symbol", "").replace("USDT", "")
                         mark = float(p.get("markPrice", 0))
                         notional = abs(amt * mark)
-                        all_positions.append((symbol, notional))
+                        all_positions.append((symbol, notional, abs(amt)))
             except (json.JSONDecodeError, SSHError):
                 pass
 
@@ -670,7 +670,7 @@ def _show_position_distribution(user_id: str, accounts: list):
                     coin = position.get("coin", "")
                     current_px = float(all_mids.get(coin, 0))
                     notional = abs(szi * current_px)
-                    all_positions.append((coin, notional))
+                    all_positions.append((coin, notional, abs(szi)))
             except Exception:
                 pass
 
@@ -692,7 +692,7 @@ def _show_position_distribution(user_id: str, accounts: list):
                                 # 去掉 _USDT 后缀
                                 symbol = symbol.replace("_USDT", "").replace("USDT", "")
                                 pv = float(pos.position_value) if hasattr(pos, 'position_value') and pos.position_value else 0
-                                all_positions.append((symbol, abs(pv)))
+                                all_positions.append((symbol, abs(pv), abs(size)))
                             break
             except Exception:
                 pass
@@ -717,7 +717,7 @@ def _show_position_distribution(user_id: str, accounts: list):
                                 if part.startswith("标记:"):
                                     mark = float(part.split(":")[1])
                                     notional = amt * mark
-                                    all_positions.append((symbol, notional))
+                                    all_positions.append((symbol, notional, amt))
                                     break
             except (SSHError, ValueError):
                 pass
@@ -745,7 +745,7 @@ for _ in range(10):
         symbol = row.get("symbol", "").replace("USDT", "")
         mark_price = float(row.get("markPrice", 0))
         notional = size * mark_price
-        positions.append({"symbol": symbol, "notional": notional})
+        positions.append({"symbol": symbol, "notional": notional, "qty": size})
     cursor = result.get("nextPageCursor", "")
     if not cursor:
         break
@@ -755,7 +755,7 @@ print(json.dumps(positions))
                 if output:
                     bybit_positions = json.loads(output)
                     for p in bybit_positions:
-                        all_positions.append((p["symbol"], p["notional"]))
+                        all_positions.append((p["symbol"], p["notional"], p.get("qty", 0)))
             except Exception:
                 pass
 
@@ -763,29 +763,38 @@ print(json.dumps(positions))
         print("\n没有合约持仓")
         return
 
-    # 合并同一币种的持仓
+    # 合并同一币种的持仓 (notional, quantity)
     merged = {}
-    for symbol, notional in all_positions:
-        merged[symbol] = merged.get(symbol, 0) + notional
+    for symbol, notional, qty in all_positions:
+        prev_n, prev_q = merged.get(symbol, (0, 0))
+        merged[symbol] = (prev_n + notional, prev_q + qty)
 
     # 按市值排序
-    sorted_positions = sorted(merged.items(), key=lambda x: x[1], reverse=True)
-    total_notional = sum(v for _, v in sorted_positions)
+    sorted_positions = sorted(merged.items(), key=lambda x: x[1][0], reverse=True)
+    total_notional = sum(v[0] for _, v in sorted_positions)
 
-    print(f"\n{'=' * 55}")
+    print(f"\n{'=' * 75}")
     print(f"  {user_name} 合约持仓分布")
     print(f"  总开仓市值: ${total_notional:,.2f} USDT")
-    print(f"{'=' * 55}")
+    print(f"{'=' * 75}")
 
     # 柱状图展示
     BAR_MAX_LEN = 20
-    max_notional = sorted_positions[0][1] if sorted_positions else 1
-    BLOCKS = " ░▒▓█"
+    max_notional = sorted_positions[0][1][0] if sorted_positions else 1
 
-    for symbol, notional in sorted_positions:
+    for symbol, (notional, qty) in sorted_positions:
         pct = (notional / total_notional * 100) if total_notional > 0 else 0
         bar_len = int(notional / max_notional * BAR_MAX_LEN)
         bar = "█" * bar_len
-        print(f"  {symbol:>10} {bar:<{BAR_MAX_LEN}}  $ {notional:>12,.2f} ({pct:>5.1f}%)")
+        # 格式化数量
+        if qty >= 1000000:
+            qty_str = f"{qty/1000000:.2f}M"
+        elif qty >= 1000:
+            qty_str = f"{qty/1000:.1f}K"
+        elif qty >= 1:
+            qty_str = f"{qty:.1f}"
+        else:
+            qty_str = f"{qty:.4f}"
+        print(f"  {symbol:>10} {bar:<{BAR_MAX_LEN}}  $ {notional:>12,.2f} ({pct:>5.1f}%)  x{qty_str}")
 
-    print(f"{'=' * 55}")
+    print(f"{'=' * 75}")
