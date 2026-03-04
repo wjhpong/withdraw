@@ -8,9 +8,22 @@ from hyperliquid.utils import constants
 from utils import load_config, get_exchange_display_name, input_amount, select_option
 
 
-def get_hyperliquid_config(user_id: str = "eb65"):
-    """获取 Hyperliquid 配置"""
+def get_hyperliquid_config(exchange: str = "hyperliquid"):
+    """获取 Hyperliquid 配置，根据 exchange 参数查找对应用户"""
     config = load_config()
+
+    # 从 _legacy 映射获取用户 ID
+    legacy = config.get("_legacy", {})
+    user_id = legacy.get(exchange)
+
+    # 如果没有映射，尝试直接用 exchange 作为 user_id
+    if not user_id:
+        # 尝试解析 exchange 格式，例如 "eb65_hyperliquid" -> "eb65"
+        if "_hyperliquid" in exchange:
+            user_id = exchange.replace("_hyperliquid", "")
+        else:
+            user_id = "eb65"  # 默认用户
+
     user = config.get("users", {}).get(user_id, {})
     hl_config = user.get("accounts", {}).get("hyperliquid", {})
 
@@ -29,7 +42,7 @@ def show_hyperliquid_balance(exchange: str = "hyperliquid"):
     print(f"\n正在查询 {display_name} 余额...")
 
     try:
-        wallet_address, _ = get_hyperliquid_config()
+        wallet_address, _ = get_hyperliquid_config(exchange)
         info = Info(constants.MAINNET_API_URL, skip_ws=True)
 
         # 获取用户状态
@@ -131,7 +144,7 @@ def show_hyperliquid_margin_ratio(exchange: str = "hyperliquid"):
     print(f"\n正在查询 {display_name} 保证金率...")
 
     try:
-        wallet_address, _ = get_hyperliquid_config()
+        wallet_address, _ = get_hyperliquid_config(exchange)
         info = Info(constants.MAINNET_API_URL, skip_ws=True)
 
         user_state = info.user_state(wallet_address)
@@ -220,7 +233,7 @@ def do_hyperliquid_transfer(exchange: str):
     display_name = get_exchange_display_name(exchange)
 
     try:
-        wallet_address, private_key = get_hyperliquid_config()
+        wallet_address, private_key = get_hyperliquid_config(exchange)
         info = Info(constants.MAINNET_API_URL, skip_ws=True)
 
         # 获取当前余额

@@ -72,12 +72,12 @@ def main():
 
             # Hyperliquid 和 Lighter 使用本地函数，其他交易所通过 EC2
             if exchange_base == "hyperliquid":
-                options.append(("查询余额", lambda: show_hyperliquid_balance()))
-                options.append(("账户划转", lambda: do_hyperliquid_transfer("hyperliquid")))
+                options.append(("查询余额", lambda ex=ec2_exchange: show_hyperliquid_balance(ex)))
+                options.append(("账户划转", lambda ex=ec2_exchange: do_hyperliquid_transfer(ex)))
                 options.append(("历史费率", lambda u=user_id: show_hyperliquid_funding_history(u)))
             elif exchange_base == "lighter":
-                options.append(("查询余额", lambda: show_lighter_balance()))
-                options.append(("保证金率", lambda: show_lighter_margin_ratio()))
+                options.append(("查询余额", lambda ex=ec2_exchange: show_lighter_balance(ex)))
+                options.append(("保证金率", lambda ex=ec2_exchange: show_lighter_margin_ratio(ex)))
                 options.append(("历史费率", lambda u=user_id: show_lighter_funding_history(u)))
             else:
                 # 所有其他交易所都支持查询余额
