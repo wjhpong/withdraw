@@ -11,7 +11,7 @@ from utils import (
 from balance import get_coin_price
 
 # 稳定币列表
-STABLECOINS = ['USDT', 'USDC', 'USD1', 'BUSD', 'TUSD', 'FDUSD', 'DAI', 'USDD']
+STABLECOINS = ['USDT', 'USDC', 'USD1', 'U', 'BUSD', 'TUSD', 'FDUSD', 'DAI', 'USDD']
 # 最小显示价值
 MIN_DISPLAY_VALUE = 10
 
@@ -77,6 +77,7 @@ def do_stablecoin_trade(exchange: str = None):
                 "USDC/USDT",
                 "BFUSD/USDT",
                 "USD1/USDT",
+                "U/USDT",
                 "返回"
             ])
             if pair_idx == 0:
@@ -85,6 +86,8 @@ def do_stablecoin_trade(exchange: str = None):
                 trade_bfusd_usdt(exchange)
             elif pair_idx == 2:
                 trade_usd1_usdt(exchange)
+            elif pair_idx == 3:
+                trade_u_usdt(exchange)
             return
         elif exchange_base == "bybit":
             # Bybit 只支持 USDC/USDT
@@ -95,10 +98,11 @@ def do_stablecoin_trade(exchange: str = None):
         "USDC/USDT (Bybit)",
         "BFUSD/USDT (Binance)",
         "USD1/USDT (Binance)",
+        "U/USDT (Binance)",
         "返回"
     ])
 
-    if pair_idx == 3:
+    if pair_idx == 4:
         return
 
     if pair_idx == 0:
@@ -109,6 +113,8 @@ def do_stablecoin_trade(exchange: str = None):
         trade_bfusd_usdt()
     elif pair_idx == 2:
         trade_usd1_usdt()
+    elif pair_idx == 3:
+        trade_u_usdt()
 
 
 def trade_usdc_usdt(exchange: str):
@@ -597,6 +603,129 @@ def trade_usd1_usdt(exchange: str = None):
                 print("\n正在下单...")
                 try:
                     output = run_on_ec2(f"sell_usd1 {exchange} limit {amount} {price}")
+                    print(output)
+                    if "error" in output.lower() or "失败" in output:
+                        print("\n下单可能失败，请检查交易所确认")
+                except SSHError as e:
+                    print(f"下单失败: {e}")
+
+        input("\n按回车继续...")
+
+
+def trade_u_usdt(exchange: str = None):
+    """Binance U/USDT 交易"""
+    if not exchange:
+        exchange = select_exchange(binance_only=True)
+        if not exchange:
+            return
+
+    display_name = get_exchange_display_name(exchange)
+    print(f"\n=== {display_name} U/USDT 交易 ===")
+
+    while True:
+        print("\n正在获取 U/USDT 深度...")
+        try:
+            output = run_on_ec2(f"orderbook {exchange} UUSDT")
+            print(output)
+        except SSHError as e:
+            print(f"获取深度失败: {e}")
+
+        print(f"正在查询 {display_name} 现货账户余额...")
+        usdt_balance = "0"
+        u_balance = "0"
+        try:
+            output = run_on_ec2(f"account_balance {exchange} SPOT USDT")
+            usdt_balance = output.strip()
+            output2 = run_on_ec2(f"account_balance {exchange} SPOT U")
+            u_balance = output2.strip()
+            print(f"USDT 余额: {usdt_balance}")
+            print(f"U 余额: {u_balance}")
+        except SSHError as e:
+            print(f"查询余额失败: {e}")
+
+        action = select_option("选择操作:", ["市价买入 U", "限价买入 U", "市价卖出 U", "限价卖出 U", "刷新深度", "返回"])
+
+        if action == 5:  # 返回
+            break
+        elif action == 4:  # 刷新深度
+            continue
+
+        # 买入操作
+        if action == 0:  # 市价买入
+            amount = input_amount("请输入买入 U 数量:")
+            if amount is None:
+                continue
+            if select_option(f"确认市价买入 {amount} U?", ["确认", "取消"]) == 0:
+                print("\n正在下单...")
+                try:
+                    output = run_on_ec2(f"buy_u {exchange} market {amount}")
+                    print(output)
+                    if "error" in output.lower() or "失败" in output:
+                        print("\n下单可能失败，请检查交易所确认")
+                except SSHError as e:
+                    print(f"下单失败: {e}")
+
+        elif action == 1:  # 限价买入
+            amount = input_amount("请输入买入 U 数量:")
+            if amount is None:
+                continue
+            price_str = input("请输入限价 (如 1.0002, 输入 0 返回): ").strip()
+            if not price_str or price_str == "0":
+                continue
+            try:
+                price = float(price_str)
+                if price <= 0:
+                    print("价格必须大于0")
+                    continue
+            except ValueError:
+                print("请输入有效的数字")
+                continue
+
+            if select_option(f"确认以 {price} 限价买入 {amount} U?", ["确认", "取消"]) == 0:
+                print("\n正在下单...")
+                try:
+                    output = run_on_ec2(f"buy_u {exchange} limit {amount} {price}")
+                    print(output)
+                    if "error" in output.lower() or "失败" in output:
+                        print("\n下单可能失败，请检查交易所确认")
+                except SSHError as e:
+                    print(f"下单失败: {e}")
+
+        # 卖出操作
+        elif action == 2:  # 市价卖出
+            amount = input_amount("请输入卖出 U 数量:")
+            if amount is None:
+                continue
+            if select_option(f"确认市价卖出 {amount} U?", ["确认", "取消"]) == 0:
+                print("\n正在下单...")
+                try:
+                    output = run_on_ec2(f"sell_u {exchange} market {amount}")
+                    print(output)
+                    if "error" in output.lower() or "失败" in output:
+                        print("\n下单可能失败，请检查交易所确认")
+                except SSHError as e:
+                    print(f"下单失败: {e}")
+
+        elif action == 3:  # 限价卖出
+            amount = input_amount("请输入卖出 U 数量:")
+            if amount is None:
+                continue
+            price_str = input("请输入限价 (如 1.0008, 输入 0 返回): ").strip()
+            if not price_str or price_str == "0":
+                continue
+            try:
+                price = float(price_str)
+                if price <= 0:
+                    print("价格必须大于0")
+                    continue
+            except ValueError:
+                print("请输入有效的数字")
+                continue
+
+            if select_option(f"确认以 {price} 限价卖出 {amount} U?", ["确认", "取消"]) == 0:
+                print("\n正在下单...")
+                try:
+                    output = run_on_ec2(f"sell_u {exchange} limit {amount} {price}")
                     print(output)
                     if "error" in output.lower() or "失败" in output:
                         print("\n下单可能失败，请检查交易所确认")
