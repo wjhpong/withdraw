@@ -354,6 +354,18 @@ def get_exchange_base(exchange: str) -> str:
     return exchange
 
 
+def get_binance_api_keys(exchange: str):
+    """从配置中获取 Binance API 密钥，返回 (api_key, api_secret) 或 (None, None)"""
+    config = load_config()
+    legacy = config.get("_legacy", {})
+    user_id = legacy.get(exchange)
+    if not user_id:
+        user_id = exchange.split("_", 1)[0] if "_" in exchange else exchange
+    user_cfg = config.get("users", {}).get(user_id, {})
+    binance_cfg = user_cfg.get("accounts", {}).get("binance", {})
+    return binance_cfg.get("api_key"), binance_cfg.get("api_secret")
+
+
 def get_bybit_api_keys(exchange: str):
     """从配置中获取 Bybit API 密钥，返回 (api_key, api_secret) 或 (None, None)"""
     config = load_config()

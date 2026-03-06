@@ -18,7 +18,6 @@ MIN_DISPLAY_VALUE = 10
 # 缓存交易对信息
 _symbol_info_cache = {}
 
-
 def get_binance_lot_size(symbol: str) -> dict:
     """获取 Binance 交易对的 LOT_SIZE 信息"""
     if symbol in _symbol_info_cache:
@@ -652,13 +651,17 @@ def trade_u_usdt(exchange: str = None):
 
         # 买入操作
         if action == 0:  # 市价买入
-            amount = input_amount("请输入买入 U 数量:")
+            amount = input_amount("请输入买入 U 数量 (整数):")
             if amount is None:
                 continue
-            if select_option(f"确认市价买入 {amount} U?", ["确认", "取消"]) == 0:
+            qty = int(amount)
+            if qty < 5:
+                print("最小买入 5 U (minNotional=5 USDT)")
+                continue
+            if select_option(f"确认市价买入 {qty} U?", ["确认", "取消"]) == 0:
                 print("\n正在下单...")
                 try:
-                    output = run_on_ec2(f"buy_u {exchange} market {amount}")
+                    output = run_on_ec2(f"buy_u {exchange} market {qty}")
                     print(output)
                     if "error" in output.lower() or "失败" in output:
                         print("\n下单可能失败，请检查交易所确认")
@@ -666,10 +669,14 @@ def trade_u_usdt(exchange: str = None):
                     print(f"下单失败: {e}")
 
         elif action == 1:  # 限价买入
-            amount = input_amount("请输入买入 U 数量:")
+            amount = input_amount("请输入买入 U 数量 (整数):")
             if amount is None:
                 continue
-            price_str = input("请输入限价 (如 1.0002, 输入 0 返回): ").strip()
+            qty = int(amount)
+            if qty < 5:
+                print("最小买入 5 U (minNotional=5 USDT)")
+                continue
+            price_str = input("请输入限价 (如 0.9995, 输入 0 返回): ").strip()
             if not price_str or price_str == "0":
                 continue
             try:
@@ -681,10 +688,10 @@ def trade_u_usdt(exchange: str = None):
                 print("请输入有效的数字")
                 continue
 
-            if select_option(f"确认以 {price} 限价买入 {amount} U?", ["确认", "取消"]) == 0:
+            if select_option(f"确认以 {price} 限价买入 {qty} U?", ["确认", "取消"]) == 0:
                 print("\n正在下单...")
                 try:
-                    output = run_on_ec2(f"buy_u {exchange} limit {amount} {price}")
+                    output = run_on_ec2(f"buy_u {exchange} limit {qty} {price}")
                     print(output)
                     if "error" in output.lower() or "失败" in output:
                         print("\n下单可能失败，请检查交易所确认")
@@ -693,13 +700,17 @@ def trade_u_usdt(exchange: str = None):
 
         # 卖出操作
         elif action == 2:  # 市价卖出
-            amount = input_amount("请输入卖出 U 数量:")
+            amount = input_amount("请输入卖出 U 数量 (整数):")
             if amount is None:
                 continue
-            if select_option(f"确认市价卖出 {amount} U?", ["确认", "取消"]) == 0:
+            qty = int(amount)
+            if qty < 5:
+                print("最小卖出 5 U (minNotional=5 USDT)")
+                continue
+            if select_option(f"确认市价卖出 {qty} U?", ["确认", "取消"]) == 0:
                 print("\n正在下单...")
                 try:
-                    output = run_on_ec2(f"sell_u {exchange} market {amount}")
+                    output = run_on_ec2(f"sell_u {exchange} market {qty}")
                     print(output)
                     if "error" in output.lower() or "失败" in output:
                         print("\n下单可能失败，请检查交易所确认")
@@ -707,10 +718,14 @@ def trade_u_usdt(exchange: str = None):
                     print(f"下单失败: {e}")
 
         elif action == 3:  # 限价卖出
-            amount = input_amount("请输入卖出 U 数量:")
+            amount = input_amount("请输入卖出 U 数量 (整数):")
             if amount is None:
                 continue
-            price_str = input("请输入限价 (如 1.0008, 输入 0 返回): ").strip()
+            qty = int(amount)
+            if qty < 5:
+                print("最小卖出 5 U (minNotional=5 USDT)")
+                continue
+            price_str = input("请输入限价 (如 1.0005, 输入 0 返回): ").strip()
             if not price_str or price_str == "0":
                 continue
             try:
@@ -722,10 +737,10 @@ def trade_u_usdt(exchange: str = None):
                 print("请输入有效的数字")
                 continue
 
-            if select_option(f"确认以 {price} 限价卖出 {amount} U?", ["确认", "取消"]) == 0:
+            if select_option(f"确认以 {price} 限价卖出 {qty} U?", ["确认", "取消"]) == 0:
                 print("\n正在下单...")
                 try:
-                    output = run_on_ec2(f"sell_u {exchange} limit {amount} {price}")
+                    output = run_on_ec2(f"sell_u {exchange} limit {qty} {price}")
                     print(output)
                     if "error" in output.lower() or "失败" in output:
                         print("\n下单可能失败，请检查交易所确认")
