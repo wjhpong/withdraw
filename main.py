@@ -96,11 +96,14 @@ def main():
                     options.append(("撤单", lambda ex=ec2_exchange: cancel_orders_menu(ex)))
                 options.append(("市价卖出", lambda ex=ec2_exchange: market_sell_menu(ex)))
 
+                # Binance / OKX 理财管理
+                if exchange_base in ("binance", "okx"):
+                    options.append(("理财管理", lambda ex=ec2_exchange: manage_earn(ex)))
+
                 # Binance 特有功能
                 if exchange_base == "binance":
                     options.append(("永续平仓", lambda ex=ec2_exchange: futures_close_menu(ex)))
                     options.append(("持仓分析", lambda ex=ec2_exchange: show_position_analysis(ex)))
-                    options.append(("理财管理", lambda ex=ec2_exchange: manage_earn(ex)))
                     if user_id != "litianyi":
                         options.append(("稳定币交易", lambda ex=ec2_exchange: do_stablecoin_trade(ex)))
                     options.append(("BNB工具", lambda ex=ec2_exchange: manage_bnb_tools(ex)))

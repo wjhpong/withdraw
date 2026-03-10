@@ -351,6 +351,8 @@ def get_exchange_base(exchange: str) -> str:
         return "aster"
     if exchange.startswith("bybit") or "_bybit" in exchange:
         return "bybit"
+    if exchange.startswith("okx") or "_okx" in exchange:
+        return "okx"
     return exchange
 
 

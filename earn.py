@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""币安理财操作"""
+"""交易所理财操作 (Binance / OKX)"""
 
-from utils import run_on_ec2, select_option, select_exchange, get_exchange_display_name, input_amount, SSHError
+from utils import run_on_ec2, select_option, select_exchange, get_exchange_display_name, get_exchange_base, input_amount, SSHError
 from balance import get_coin_balance, get_coin_price
 
 # 显示余额的最小价值阈值
@@ -176,32 +176,66 @@ def do_earn_redeem(exchange: str):
         print(f"❌ 赎回失败: {e}")
 
 
+def show_earn_history(exchange: str):
+    """查询活期理财历史收益 (OKX)"""
+    display_name = get_exchange_display_name(exchange)
+    coin = input("\n请输入币种 (直接回车=全部, 输入 0 返回): ").strip().upper()
+    if coin == "0":
+        return
+    if not coin:
+        coin = None
+
+    print(f"\n正在查询 {display_name} 理财历史收益...")
+    try:
+        cmd = f"earn history {exchange}"
+        if coin:
+            cmd += f" {coin}"
+        output = run_on_ec2(cmd)
+        print(output)
+    except SSHError as e:
+        print(f"❌ 查询历史收益失败: {e}")
+
+
 def manage_earn(exchange: str = None):
     """理财管理菜单"""
-    # 选择 Binance 账号
     if not exchange:
         exchange = select_exchange(binance_only=True)
         if not exchange:
             return
 
+    exchange_base = get_exchange_base(exchange)
     display_name = get_exchange_display_name(exchange)
     print(f"\n已选择账号: {display_name}")
-    
+
     # 自动显示现货余额
     show_spot_balances(exchange)
 
     while True:
-        action = select_option(f"币安理财 [{display_name}]:", ["查询持仓", "可申购额度", "申购活期", "赎回活期", "返回"])
-
-        if action == 0:
-            show_earn_position(exchange)
-        elif action == 1:
-            show_earn_quota(exchange)
-        elif action == 2:
-            do_earn_subscribe(exchange)
-        elif action == 3:
-            do_earn_redeem(exchange)
+        if exchange_base == "okx":
+            action = select_option(f"OKX理财 [{display_name}]:", ["查询持仓", "历史收益", "可申购额度", "申购活期", "赎回活期", "返回"])
+            if action == 0:
+                show_earn_position(exchange)
+            elif action == 1:
+                show_earn_history(exchange)
+            elif action == 2:
+                show_earn_quota(exchange)
+            elif action == 3:
+                do_earn_subscribe(exchange)
+            elif action == 4:
+                do_earn_redeem(exchange)
+            else:
+                break
         else:
-            break
+            action = select_option(f"币安理财 [{display_name}]:", ["查询持仓", "可申购额度", "申购活期", "赎回活期", "返回"])
+            if action == 0:
+                show_earn_position(exchange)
+            elif action == 1:
+                show_earn_quota(exchange)
+            elif action == 2:
+                do_earn_subscribe(exchange)
+            elif action == 3:
+                do_earn_redeem(exchange)
+            else:
+                break
 
         input("\n按回车继续...")
