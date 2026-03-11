@@ -295,13 +295,13 @@ def select_account(user_id: str, allow_back: bool = True, show_combined: bool = 
         print(f"\n该用户没有配置任何交易所账号")
         return None
 
-    if len(accounts) == 1 and not show_combined:
-        # 只有一个账号且不显示综合选项，直接返回
+    if len(accounts) == 1:
+        # 只有一个账号，直接返回，不显示多交易所选项
         return accounts[0][0]
 
     account_names = [name for _, name in accounts]
 
-    # 添加特殊选项（单账号也显示，方便查看）
+    # 多账号时添加特殊选项
     if show_combined:
         account_names.append("== 多交易所余额 ==")
         account_names.append("== 综合收益 ==")
