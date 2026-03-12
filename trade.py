@@ -796,6 +796,19 @@ def get_spot_open_orders(exchange: str) -> list:
                 'qty': o.get('size', ''),
                 'orderId': o.get('orderId', '')
             } for o in orders]
+        elif exchange_base == "aster":
+            output = run_on_ec2(f"aster_spot_orders {exchange}")
+            orders = json.loads(output.strip())
+            if isinstance(orders, dict) and "error" in orders:
+                print(f"获取现货挂单失败: {orders['error']}")
+                return []
+            return [{
+                'symbol': o.get('symbol', ''),
+                'side': o.get('side', '').upper(),
+                'price': o.get('price', ''),
+                'qty': o.get('origQty', ''),
+                'orderId': o.get('orderId', '')
+            } for o in orders]
         else:
             print(f"暂不支持 {exchange_base} 交易所的现货撤单")
             return []
@@ -846,6 +859,22 @@ def get_futures_open_orders(exchange: str, use_portfolio: bool = True) -> list:
                 'qty': o.get('origQty', ''),
                 'orderId': o.get('orderId', ''),
                 'source': 'aster'
+            } for o in orders]
+
+        elif exchange_base == "bybit":
+            output = run_on_ec2(f"bybit_open_orders {exchange}")
+            orders = json.loads(output.strip())
+            if isinstance(orders, dict) and "error" in orders:
+                print(f"获取永续挂单失败: {orders['error']}")
+                return []
+
+            return [{
+                'symbol': o.get('symbol', ''),
+                'side': o.get('side', ''),
+                'price': o.get('price', ''),
+                'qty': o.get('origQty', ''),
+                'orderId': o.get('orderId', ''),
+                'source': 'bybit'
             } for o in orders]
 
         else:
@@ -910,7 +939,15 @@ def cancel_single_order(exchange: str, order_type: str, symbol: str, order_id: s
             return 'orderId' in result or result.get('code') == '00000'
 
         elif exchange_base == "aster":
-            output = run_on_ec2(f"aster_cancel {exchange} {symbol} {order_id}")
+            if order_type == "spot":
+                output = run_on_ec2(f"aster_cancel_spot {exchange} {symbol} {order_id}")
+            else:
+                output = run_on_ec2(f"aster_cancel {exchange} {symbol} {order_id}")
+            result = json.loads(output.strip())
+            return 'orderId' in result or 'status' in result
+
+        elif exchange_base == "bybit":
+            output = run_on_ec2(f"bybit_cancel_order {exchange} {symbol} {order_id}")
             result = json.loads(output.strip())
             return 'orderId' in result or 'status' in result
 
@@ -1070,6 +1107,17 @@ def cancel_orders_menu(exchange: str):
                 cancel_futures_orders(exchange, use_portfolio=True)
 
         elif exchange_base == "aster":
+            options = ["现货撤单", "永续撤单", "返回"]
+            action = select_option("选择订单类型:", options)
+
+            if action == 2:
+                return
+            elif action == 0:
+                cancel_spot_orders(exchange)
+            elif action == 1:
+                cancel_futures_orders(exchange, use_portfolio=False)
+
+        elif exchange_base == "bybit":
             options = ["永续撤单", "返回"]
             action = select_option("选择订单类型:", options)
 
@@ -1130,6 +1178,34 @@ def get_spot_balances(exchange: str) -> list:
                 assets = json.loads(output.strip())
                 if isinstance(assets, list):
                     return [a for a in assets if a.get('free', 0) > 0]
+                elif isinstance(assets, dict) and 'error' in assets:
+                    print(f"获取资产失败: {assets['error']}")
+                    return []
+            except json.JSONDecodeError:
+                print(f"解析资产数据失败")
+                return []
+
+        # Aster 使用专门命令
+        if exchange_base == "aster":
+            output = run_on_ec2(f"aster_spot_assets {exchange}")
+            try:
+                assets = json.loads(output.strip())
+                if isinstance(assets, list):
+                    for a in assets:
+                        asset = a.get('asset', '').upper()
+                        free = float(a.get('free', 0))
+                        if asset in STABLECOINS or free <= 0:
+                            continue
+                        price = get_coin_price(asset)
+                        value = free * price
+                        if value >= MIN_DISPLAY_VALUE:
+                            balances.append({
+                                'asset': asset,
+                                'free': free,
+                                'value': value
+                            })
+                    balances.sort(key=lambda x: x['value'], reverse=True)
+                    return balances
                 elif isinstance(assets, dict) and 'error' in assets:
                     print(f"获取资产失败: {assets['error']}")
                     return []
@@ -1256,6 +1332,16 @@ def market_sell_spot(exchange: str, symbol: str, qty: float) -> bool:
             data = result.get('data') or {}
             if result.get('code') == '00000' or 'orderId' in data:
                 print(f"  订单ID: {data.get('orderId', 'N/A')}")
+                return True
+            else:
+                print(f"  错误: {result.get('msg', result)}")
+                return False
+        elif exchange_base == "aster":
+            output = run_on_ec2(f"aster_spot_market_sell {exchange} {symbol} {qty}")
+            result = json.loads(output.strip())
+            if 'orderId' in result:
+                print(f"  订单ID: {result['orderId']}")
+                print(f"  成交数量: {result.get('executedQty', 'N/A')}")
                 return True
             else:
                 print(f"  错误: {result.get('msg', result)}")
@@ -1499,6 +1585,74 @@ def get_um_positions(exchange: str) -> list:
 
             result.sort(key=lambda x: x["notional"], reverse=True)
             return result
+        elif exchange_base == "bybit":
+            output = run_on_ec2(f"bybit_positions {exchange}")
+            positions = json.loads(output.strip())
+
+            if isinstance(positions, dict) and "error" in positions:
+                print(f"API 错误: {positions.get('error')}")
+                return []
+
+            result = []
+            for p in positions:
+                symbol = p.get("symbol", "")
+                position_amt = float(p.get("positionAmt", 0))
+                entry_price = float(p.get("entryPrice", 0))
+                mark_price = float(p.get("markPrice", 0))
+                unrealized_pnl = float(p.get("unRealizedProfit", 0))
+
+                if position_amt == 0:
+                    continue
+
+                notional = abs(position_amt * mark_price)
+
+                result.append({
+                    "symbol": symbol,
+                    "positionAmt": position_amt,
+                    "entryPrice": entry_price,
+                    "markPrice": mark_price,
+                    "unrealizedPnl": unrealized_pnl,
+                    "notional": notional,
+                    "side": "LONG" if position_amt > 0 else "SHORT"
+                })
+
+            result.sort(key=lambda x: x["notional"], reverse=True)
+            return result
+
+        elif exchange_base == "aster":
+            output = run_on_ec2(f"aster_positions_json {exchange}")
+            positions = json.loads(output.strip())
+
+            if isinstance(positions, dict) and "error" in positions:
+                print(f"API 错误: {positions.get('error')}")
+                return []
+
+            result = []
+            for p in positions:
+                symbol = p.get("symbol", "")
+                position_amt = float(p.get("positionAmt", 0))
+                entry_price = float(p.get("entryPrice", 0))
+                mark_price = float(p.get("markPrice", 0))
+                unrealized_pnl = float(p.get("unRealizedProfit", 0))
+
+                if position_amt == 0:
+                    continue
+
+                notional = abs(position_amt * mark_price)
+
+                result.append({
+                    "symbol": symbol,
+                    "positionAmt": position_amt,
+                    "entryPrice": entry_price,
+                    "markPrice": mark_price,
+                    "unrealizedPnl": unrealized_pnl,
+                    "notional": notional,
+                    "side": "LONG" if position_amt > 0 else "SHORT"
+                })
+
+            result.sort(key=lambda x: x["notional"], reverse=True)
+            return result
+
         else:
             print(f"暂不支持 {exchange_base} 交易所的永续持仓查询")
             return []
@@ -1559,6 +1713,36 @@ def market_close_position(exchange: str, symbol: str, quantity: float, position_
             else:
                 print(f"  错误: {result.get('msg', result)}")
                 return False
+        elif exchange_base == "bybit":
+            # Bybit: Buy=平空, Sell=平多
+            close_side = "Sell" if position_side == "LONG" else "Buy"
+
+            output = run_on_ec2(f"bybit_close {exchange} {symbol} {quantity} {close_side}")
+            result = json.loads(output.strip())
+
+            if "orderId" in result:
+                print(f"  订单ID: {result['orderId']}")
+                print(f"  状态: {result.get('status', 'N/A')}")
+                return True
+            else:
+                print(f"  错误: {result.get('error', result)}")
+                return False
+
+        elif exchange_base == "aster":
+            close_side = "SELL" if position_side == "LONG" else "BUY"
+
+            output = run_on_ec2(f"aster_close {exchange} {symbol} {quantity} {close_side}")
+            result = json.loads(output.strip())
+
+            if "orderId" in result:
+                print(f"  订单ID: {result['orderId']}")
+                print(f"  状态: {result.get('status', 'N/A')}")
+                print(f"  成交数量: {result.get('executedQty', 'N/A')}")
+                return True
+            else:
+                print(f"  错误: {result.get('msg', result)}")
+                return False
+
         else:
             print(f"暂不支持 {exchange_base} 交易所的永续平仓")
             return False
@@ -1674,3 +1858,50 @@ def futures_close_menu(exchange: str):
             print("平仓可能失败，请检查交易所确认")
 
         input("\n按回车继续...")
+
+
+# ===================== 组合菜单 =====================
+
+def spot_trade_menu(exchange: str):
+    """现货交易菜单（市价卖出 + 撤单）"""
+    while True:
+        print(f"\n=== 现货交易 ===")
+
+        action = select_option("选择操作:", [
+            "市价卖出",
+            "撤单",
+            "返回"
+        ])
+
+        if action == 2:
+            return
+        elif action == 0:
+            market_sell_menu(exchange)
+        elif action == 1:
+            cancel_spot_orders(exchange)
+            input("\n按回车继续...")
+
+
+def futures_trade_menu(exchange: str):
+    """永续交易菜单（平仓 + 撤单）"""
+    exchange_base = get_exchange_base(exchange)
+
+    while True:
+        print(f"\n=== 永续交易 ===")
+
+        action = select_option("选择操作:", [
+            "平仓",
+            "撤单",
+            "返回"
+        ])
+
+        if action == 2:
+            return
+        elif action == 0:
+            futures_close_menu(exchange)
+        elif action == 1:
+            if exchange_base == "binance":
+                cancel_futures_orders(exchange, use_portfolio=True)
+            else:
+                cancel_futures_orders(exchange, use_portfolio=False)
+            input("\n按回车继续...")

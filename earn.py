@@ -205,6 +205,8 @@ def manage_earn(exchange: str = None):
 
     exchange_base = get_exchange_base(exchange)
     display_name = get_exchange_display_name(exchange)
+    exchange_base = get_exchange_base(exchange)
+    earn_label = "OKX理财" if exchange_base == "okx" else "币安理财"
     print(f"\n已选择账号: {display_name}")
 
     # 自动显示现货余额

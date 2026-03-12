@@ -436,6 +436,18 @@ def do_transfer(exchange: str = None):
         # Bitget: 子账户 → 主账户
         do_bitget_subaccount_transfer(exchange)
         return
+    elif exchange_base == "okx":
+        # OKX: 交易账户 ↔ 资金账户
+        transfer_options = [
+            ("TRADING", "FUNDING", "交易账户 → 资金账户"),
+            ("FUNDING", "TRADING", "资金账户 → 交易账户"),
+        ]
+        option_names = [opt[2] for opt in transfer_options]
+        transfer_idx = select_option("选择划转方向:", option_names, allow_back=True)
+        if transfer_idx == -1:
+            return
+        from_type = transfer_options[transfer_idx][0]
+        to_type = transfer_options[transfer_idx][1]
     elif exchange_base == "aster":
         # Aster: 现货 ↔ 合约 (使用 aster.py)
         from aster import do_aster_transfer
@@ -489,8 +501,8 @@ def do_transfer(exchange: str = None):
     
     # 确认
     # 显示友好的账户名称
-    from_display = {"FUND": "现货账户", "UNIFIED": "统一账户", "SPOT": "现货账户", "PORTFOLIO_MARGIN": "统一账户"}.get(from_type, from_type)
-    to_display = {"FUND": "现货账户", "UNIFIED": "统一账户", "SPOT": "现货账户", "PORTFOLIO_MARGIN": "统一账户"}.get(to_type, to_type)
+    from_display = {"FUND": "现货账户", "UNIFIED": "统一账户", "SPOT": "现货账户", "PORTFOLIO_MARGIN": "统一账户", "TRADING": "交易账户", "FUNDING": "资金账户"}.get(from_type, from_type)
+    to_display = {"FUND": "现货账户", "UNIFIED": "统一账户", "SPOT": "现货账户", "PORTFOLIO_MARGIN": "统一账户", "TRADING": "交易账户", "FUNDING": "资金账户"}.get(to_type, to_type)
 
     print(f"\n确认划转 {amount} {coin}: {from_display} → {to_display}")
 

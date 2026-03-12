@@ -174,6 +174,12 @@ def do_withdraw(exchange: str = None, user_id: str = None):
         # Bitget: 查询现货账户
         spot_bal = get_coin_balance(exchange, coin, "SPOT")
         print(f"💰 {coin} 现货账户: {fmt_bal(spot_bal)}")
+    elif exchange_base == "okx":
+        # OKX: 查询交易账户和资金账户
+        trading_bal = get_coin_balance(exchange, coin, "TRADING")
+        funding_bal = get_coin_balance(exchange, coin, "FUNDING")
+        print(f"💰 {coin} 交易账户: {fmt_bal(trading_bal)}")
+        print(f"💰 {coin} 资金账户: {fmt_bal(funding_bal)}")
 
     # 处理地址和网络
     # 特殊地址强制使用固定网络
@@ -341,6 +347,31 @@ def do_withdraw(exchange: str = None, user_id: str = None):
                     transfer_result = run_on_ec2(f"transfer {exchange} PORTFOLIO_MARGIN MAIN {coin} {transfer_amount}")
                     print(transfer_result)
                     time.sleep(1)
+
+        elif exchange_base == "okx":
+            # OKX: 查询资金账户余额，提现从资金账户出发
+            funding_balance = float(get_coin_balance(exchange, coin, "FUNDING") or 0)
+
+            # 如果资金账户余额不足，从交易账户划转
+            if funding_balance < required_amount:
+                trading_balance = float(get_coin_balance(exchange, coin, "TRADING") or 0)
+
+                if trading_balance > 0:
+                    transfer_amount = required_amount - funding_balance
+                    if transfer_amount > trading_balance:
+                        transfer_amount = trading_balance
+                    transfer_amount_str = _format_amount_for_transfer(transfer_amount, decimals=6)
+
+                    print(f"\n⚠️  资金账户余额不足 ({funding_balance} {coin})，需要约 {required_amount} {coin}（含手续费）")
+                    print(f"   交易账户余额: {trading_balance} {coin}")
+                    print(f"   正在从交易账户划转 {transfer_amount_str} {coin} 到资金账户...")
+
+                    if float(transfer_amount_str) > 0:
+                        transfer_result = run_on_ec2(f"transfer {exchange} TRADING FUNDING {coin} {transfer_amount_str}")
+                        print(transfer_result)
+                        if _looks_like_error(transfer_result):
+                            print("⚠️  自动划转失败，将继续按当前资金账户余额尝试提现")
+                        time.sleep(1)
 
     except SSHError as e:
         print(f"❌ 自动划转失败: {e}")

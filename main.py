@@ -15,7 +15,7 @@ from lighter_ops import show_lighter_balance, show_lighter_margin_ratio
 from withdraw_ops import do_withdraw
 from transfer import do_transfer, do_binance_subaccount_transfer
 from earn import manage_earn
-from trade import do_stablecoin_trade, cancel_orders_menu, market_sell_menu, futures_close_menu, buy_gt, buy_bgb
+from trade import do_stablecoin_trade, cancel_orders_menu, market_sell_menu, futures_close_menu, spot_trade_menu, futures_trade_menu, buy_gt, buy_bgb
 from addresses import manage_addresses
 from bnb_tools import manage_bnb_tools
 from funding import show_funding_rate, show_binance_funding_history, show_aster_funding_history, show_hyperliquid_funding_history, show_lighter_funding_history, show_bybit_funding_history, show_combined_funding_summary
@@ -91,10 +91,12 @@ def main():
                 if exchange_base != "gate":
                     options.append(("账户划转", lambda ex=ec2_exchange: do_transfer(ex)))
 
-                # 交易功能 (撤单、市价卖出) - Bybit 撤单在稳定币交易里
-                if exchange_base != "bybit":
-                    options.append(("撤单", lambda ex=ec2_exchange: cancel_orders_menu(ex)))
-                options.append(("市价卖出", lambda ex=ec2_exchange: market_sell_menu(ex)))
+                # 现货交易 (市价卖出 + 撤单)
+                options.append(("现货交易", lambda ex=ec2_exchange: spot_trade_menu(ex)))
+
+                # 永续交易 (平仓 + 撤单) - Binance / Bybit / Aster
+                if exchange_base in ("binance", "bybit", "aster"):
+                    options.append(("永续交易", lambda ex=ec2_exchange: futures_trade_menu(ex)))
 
                 # Binance / OKX 理财管理
                 if exchange_base in ("binance", "okx"):
@@ -102,7 +104,6 @@ def main():
 
                 # Binance 特有功能
                 if exchange_base == "binance":
-                    options.append(("永续平仓", lambda ex=ec2_exchange: futures_close_menu(ex)))
                     options.append(("持仓分析", lambda ex=ec2_exchange: show_position_analysis(ex)))
                     if user_id != "litianyi":
                         options.append(("稳定币交易", lambda ex=ec2_exchange: do_stablecoin_trade(ex)))

@@ -480,6 +480,16 @@ def get_coin_balance(exchange: str, coin: str, account_type: str = "SPOT") -> st
             output = run_on_ec2(f"balance {exchange}")
             return _parse_balance_from_output(output, coin)
 
+        elif exchange_base == "okx":
+            # OKX: TRADING (交易账户) / FUNDING (资金账户)
+            output = run_on_ec2(f"account_balance {exchange} {account_type} {coin}").strip()
+            if output and not output.startswith(("用法", "未知", "错误")):
+                try:
+                    return str(float(output))
+                except ValueError:
+                    pass
+            return "0"
+
         else:
             # Binance - 使用 account_balance 命令精确查询
             output = run_on_ec2(f"account_balance {exchange} {account_type} {coin}").strip()
