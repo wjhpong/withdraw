@@ -1226,7 +1226,8 @@ def get_spot_balances(exchange: str) -> list:
                             continue
                         price = get_coin_price(asset)
                         value = free * price
-                        if value >= MIN_DISPLAY_VALUE:
+                        min_display = 1 if exchange_base == "aster" else MIN_DISPLAY_VALUE
+                        if value >= min_display:
                             balances.append({
                                 'asset': asset,
                                 'free': free,
@@ -1245,20 +1246,34 @@ def get_spot_balances(exchange: str) -> list:
         output = run_on_ec2(f"balance {exchange}")
 
         raw_balances = []
-        for line in output.split('\n'):
-            line = line.strip()
-            if not line or ':' not in line:
-                continue
-            parts = line.split(':')
-            if len(parts) >= 2:
-                asset = parts[0].strip().upper()
-                try:
-                    amount_str = parts[1].strip().split()[0]
-                    amount = float(amount_str)
-                    if amount > 0:
-                        raw_balances.append({'asset': asset, 'free': amount})
-                except (ValueError, IndexError):
+        if exchange_base == "aster":
+            for line in output.split('\n'):
+                parts = line.split()
+                if len(parts) >= 2 and "可用:" in line:
+                    asset = parts[0].strip().upper()
+                    for j, p in enumerate(parts):
+                        if p == "可用:" and j + 1 < len(parts):
+                            try:
+                                amount = float(parts[j + 1])
+                                if amount > 0:
+                                    raw_balances.append({'asset': asset, 'free': amount})
+                            except ValueError:
+                                pass
+        else:
+            for line in output.split('\n'):
+                line = line.strip()
+                if not line or ':' not in line:
                     continue
+                parts = line.split(':')
+                if len(parts) >= 2:
+                    asset = parts[0].strip().upper()
+                    try:
+                        amount_str = parts[1].strip().split()[0]
+                        amount = float(amount_str)
+                        if amount > 0:
+                            raw_balances.append({'asset': asset, 'free': amount})
+                    except (ValueError, IndexError):
+                        continue
 
         for b in raw_balances:
             asset = b.get('asset', '').upper()
@@ -1270,7 +1285,15 @@ def get_spot_balances(exchange: str) -> list:
             price = get_coin_price(asset)
             value = free * price
 
-            if value >= MIN_DISPLAY_VALUE:
+            if exchange_base == "aster":
+                # Aster 经常有一些未知币种无法在 Binance 获取价格
+                if price == 0:
+                    value = free  # 假设价格为1，只要数量 >= 1 就显示
+                min_display = 1
+            else:
+                min_display = MIN_DISPLAY_VALUE
+
+            if value >= min_display:
                 balances.append({
                     'asset': asset,
                     'free': free,
@@ -1339,12 +1362,12 @@ def market_sell_spot(exchange: str, symbol: str, qty: float) -> bool:
         elif exchange_base == "aster":
             output = run_on_ec2(f"aster_spot_market_sell {exchange} {symbol} {qty}")
             result = json.loads(output.strip())
-            if 'orderId' in result:
-                print(f"  订单ID: {result['orderId']}")
-                print(f"  成交数量: {result.get('executedQty', 'N/A')}")
+            if isinstance(result, dict) and ('orderId' in result or 'id' in result):
+                order_id = result.get('orderId') or result.get('id', 'N/A')
+                print(f"  订单ID: {order_id}")
                 return True
             else:
-                print(f"  错误: {result.get('msg', result)}")
+                print(f"  错误: {result.get('msg', result.get('message', result))}")
                 return False
         else:
             print(f"暂不支持 {exchange_base} 交易所的市价卖出")
