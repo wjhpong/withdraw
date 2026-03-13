@@ -549,7 +549,7 @@ def show_binance_funding_history(exchange: str = None):
 
 
 def get_bybit_funding_history(symbol: str, days: int = 7):
-    """查询 Bybit 历史资金费率（公共接口）"""
+    """查询 Bybit 历史资金费率（公共接口，自动分页）"""
     symbol = symbol.upper()
     if not symbol.endswith("USDT"):
         symbol += "USDT"
@@ -559,28 +559,43 @@ def get_bybit_funding_history(symbol: str, days: int = 7):
     end_ms = int(now.timestamp() * 1000)
 
     url = f"{BYBIT_BASE}/v5/market/funding/history"
-    limit = min(max(days * 4 + 10, 20), 200)
-    params = {
-        "category": "linear",
-        "symbol": symbol,
-        "startTime": start_ms,
-        "endTime": end_ms,
-        "limit": limit
-    }
+    all_records = []
+    current_end = end_ms
 
-    try:
-        resp = requests.get(url, params=params, timeout=10)
-        if resp.status_code != 200:
-            print(f"API 错误: {resp.status_code}")
-            return []
-        data = resp.json()
-        if data.get("retCode") != 0:
-            print(f"API 错误: {data.get('retMsg', data.get('retCode'))}")
-            return []
-        return data.get("result", {}).get("list", [])
-    except Exception as e:
-        print(f"请求失败: {e}")
-        return []
+    for _ in range(10):  # 最多10轮分页，每轮200条，够约500天
+        params = {
+            "category": "linear",
+            "symbol": symbol,
+            "startTime": start_ms,
+            "endTime": current_end,
+            "limit": 200
+        }
+        try:
+            resp = requests.get(url, params=params, timeout=10)
+            if resp.status_code != 200:
+                print(f"API 错误: {resp.status_code}")
+                break
+            data = resp.json()
+            if data.get("retCode") != 0:
+                print(f"API 错误: {data.get('retMsg', data.get('retCode'))}")
+                break
+            records = data.get("result", {}).get("list", [])
+            if not records:
+                break
+            all_records.extend(records)
+            # 如果返回不足200条，说明已经拿完
+            if len(records) < 200:
+                break
+            # 用最老一条的时间作为下一轮的 endTime
+            oldest_ts = int(records[-1].get("fundingRateTimestamp", 0))
+            if oldest_ts <= start_ms:
+                break
+            current_end = oldest_ts - 1
+        except Exception as e:
+            print(f"请求失败: {e}")
+            break
+
+    return all_records
 
 
 def show_bybit_funding_history(exchange: str = None):
@@ -1404,36 +1419,38 @@ def get_bybit_funding_records(exchange: str, days: int = 7):
     """获取 Bybit 资金费明细列表，返回 [{"symbol": ..., "funding": ..., "time": ...}, ...]"""
     script = _BYBIT_SIGNED_GET_SCRIPT + r"""
 days = int(sys.argv[3])
-cutoff = int((time.time() - days * 24 * 3600) * 1000)
+now_ms = int(time.time() * 1000)
+cutoff = now_ms - days * 24 * 3600 * 1000
 records = []
-cursor = ""
-for _ in range(30):
-    params = {"accountType": "UNIFIED", "category": "linear", "type": "SETTLEMENT", "limit": "50"}
-    if cursor:
-        params["cursor"] = cursor
-    data = signed_get("/v5/account/transaction-log", params)
-    if data.get("retCode") != 0:
-        print(json.dumps({"error": data.get("retMsg", str(data.get("retCode")))}))
-        sys.exit(0)
-    result = data.get("result", {})
-    rows = result.get("list", [])
-    if not rows:
-        break
-    stop = False
-    for row in rows:
-        tx_time = int(row.get("transactionTime", 0))
-        if tx_time and tx_time < cutoff:
-            stop = True
+
+# Bybit transaction-log 限制: endTime - startTime <= 7天, 需分窗口查询
+window = 7 * 24 * 3600 * 1000  # 7天毫秒
+w_end = now_ms
+while w_end > cutoff:
+    w_start = max(w_end - window, cutoff)
+    cursor = ""
+    for _ in range(30):
+        params = {"accountType": "UNIFIED", "category": "linear", "type": "SETTLEMENT", "limit": "50", "startTime": str(w_start), "endTime": str(w_end)}
+        if cursor:
+            params["cursor"] = cursor
+        data = signed_get("/v5/account/transaction-log", params)
+        if data.get("retCode") != 0:
+            print(json.dumps({"error": data.get("retMsg", str(data.get("retCode")))}))
+            sys.exit(0)
+        result = data.get("result", {})
+        rows = result.get("list", [])
+        if not rows:
             break
-        funding = float(row.get("funding", 0))
-        if funding == 0:
-            continue
-        records.append({"symbol": row.get("symbol", ""), "funding": funding, "time": tx_time})
-    if stop:
-        break
-    cursor = result.get("nextPageCursor", "")
-    if not cursor:
-        break
+        for row in rows:
+            funding = float(row.get("funding", 0))
+            if funding == 0:
+                continue
+            tx_time = int(row.get("transactionTime", 0))
+            records.append({"symbol": row.get("symbol", ""), "funding": funding, "time": tx_time})
+        cursor = result.get("nextPageCursor", "")
+        if not cursor:
+            break
+    w_end = w_start - 1
 
 print(json.dumps(records))
 """
